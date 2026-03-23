@@ -1,0 +1,99 @@
+/*
+ * Axiomeer — Application-specific styles
+ * Built on Paper UI design system
+ */
+
+/* Domain indicator pill in topbar */
+.domain-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-family: var(--f-m);
+  font-size: 11px;
+  border: 1.5px solid transparent;
+}
+.domain-pill.legal   { background: var(--blue-pale);   color: var(--blue-d);   border-color: var(--blue-mid); }
+.domain-pill.health  { background: var(--teal-pale);   color: var(--teal-d);   border-color: var(--teal-mid); }
+.domain-pill.finance { background: var(--amber-pale);  color: var(--amber-d);  border-color: var(--amber-mid); }
+
+/* Theme toggle button */
+.theme-toggle {
+  width: 34px;
+  height: 34px;
+  border-radius: var(--r-sm);
+  background: var(--white);
+  border: 1.5px solid var(--border);
+  color: var(--ink-3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 17px;
+  transition: all 0.18s var(--ease);
+}
+.theme-toggle:hover {
+  border-color: var(--border-d);
+  color: var(--ink);
+  box-shadow: var(--sh-sm);
+}
+.theme-toggle .ph-sun  { display: none; }
+.theme-toggle .ph-moon { display: block; }
+[data-theme="dark"] .theme-toggle .ph-sun  { display: block; }
+[data-theme="dark"] .theme-toggle .ph-moon { display: none; }
+
+/* Card header pattern */
+.card-header {
+  padding: 1.25rem 1.5rem;
+  border-bottom: 1.5px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.card-header-title {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.card-header-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+}
+.card-header-icon.teal  { background: var(--teal-pale);  color: var(--teal-d);  border: 1.5px solid var(--teal-mid); }
+.card-header-icon.blue  { background: var(--blue-pale);  color: var(--blue-d);  border: 1.5px solid var(--blue-mid); }
+.card-header-icon.coral { background: var(--coral-pale); color: var(--coral-d); border: 1.5px solid var(--coral-mid); }
+.card-header-icon.amber { background: var(--amber-pale); color: var(--amber-d); border: 1.5px solid var(--amber-mid); }
+.card-header-text {
+  font-family: var(--f-d);
+  font-size: 14px;
+  font-weight: 700;
+}
+.card-header-meta {
+  font-family: var(--f-m);
+  font-size: 11.5px;
+  color: var(--ink-4);
+}
+.card-body {
+  padding: 1.5rem;
+}
+
+/* Safety status indicators */
+.safety-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-family: var(--f-m);
+  font-size: 11px;
+  font-weight: 700;
+}
+.safety-badge.green  { background: var(--teal-pale);  color: var(--teal-d);  border: 1.5px solid var(--teal-mid); }
+.safety-badge.amber  { background: var(--amber-pale); color: var(--amber-d); border: 1.5px solid var(--amber-mid); }
+.safety-badge.red    { background: var(--coral-pale); color: var(--coral-d); border: 1.5px solid var(--coral-mid); }
