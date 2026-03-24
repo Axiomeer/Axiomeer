@@ -31,7 +31,7 @@
             </li>
 
             <li class="nav-item">
-                <a class="nav-link" href="{{ url('/query') }}">
+                <a class="nav-link" href="{{ route('query.index') }}">
                     <span class="nav-icon">
                         <iconify-icon icon="iconamoon:comment-duotone"></iconify-icon>
                     </span>
