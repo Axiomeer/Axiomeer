@@ -5,9 +5,7 @@ export default defineConfig({
     plugins: [
         laravel({
             input: [
-                'resources/css/paper-ui.css',
                 'resources/css/app.css',
-                'resources/js/paper-ui.js',
                 'resources/js/app.js',
             ],
             refresh: true,

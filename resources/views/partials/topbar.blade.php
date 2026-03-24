@@ -1,37 +1,110 @@
+{{-- Topbar --}}
 <header class="topbar">
-    <div class="topbar-left">
-        {{-- Sidebar toggle --}}
-        <button class="topbar-toggle" id="sidebar-toggle" title="Toggle sidebar">
-            <i class="ph ph-list"></i>
-        </button>
+    <div class="container-xxl">
+        <div class="navbar-header">
+            <div class="d-flex align-items-center gap-2">
+                {{-- Menu Toggle --}}
+                <div class="topbar-item">
+                    <button type="button" class="button-toggle-menu">
+                        <iconify-icon icon="iconamoon:menu-burger-horizontal" class="fs-22"></iconify-icon>
+                    </button>
+                </div>
 
-        {{-- Page title --}}
-        <span class="topbar-title">@yield('page-title', 'Dashboard')</span>
-    </div>
+                {{-- Page Title --}}
+                <div class="d-none d-md-flex align-items-center">
+                    <h5 class="mb-0 fw-semibold">@yield('page-title', 'Dashboard')</h5>
+                </div>
+            </div>
 
-    <div class="topbar-right">
-        {{-- Domain selector --}}
-        <select class="mm-select" id="domain-selector" style="width:160px;padding:6px 30px 6px 10px;font-size:12px;">
-            <option value="legal">Legal</option>
-            <option value="healthcare">Healthcare</option>
-            <option value="finance">Finance</option>
-        </select>
+            <div class="d-flex align-items-center gap-1">
+                {{-- Domain Selector --}}
+                <div class="dropdown topbar-item">
+                    <button type="button" class="topbar-button" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                        <span class="d-flex align-items-center gap-1">
+                            <iconify-icon icon="iconamoon:category-duotone" class="fs-22"></iconify-icon>
+                            <span class="d-none d-md-inline fw-medium axiomeer-domain-label">Legal</span>
+                        </span>
+                    </button>
+                    <div class="dropdown-menu dropdown-menu-end">
+                        <h6 class="dropdown-header">Select Domain</h6>
+                        <a class="dropdown-item axiomeer-domain-item" href="#" data-domain="legal">
+                            <i class="bx bx-briefcase text-primary fs-18 align-middle me-1"></i>
+                            <span class="align-middle">Legal</span>
+                        </a>
+                        <a class="dropdown-item axiomeer-domain-item" href="#" data-domain="healthcare">
+                            <i class="bx bx-plus-medical text-success fs-18 align-middle me-1"></i>
+                            <span class="align-middle">Healthcare</span>
+                        </a>
+                        <a class="dropdown-item axiomeer-domain-item" href="#" data-domain="finance">
+                            <i class="bx bx-bar-chart-alt-2 text-warning fs-18 align-middle me-1"></i>
+                            <span class="align-middle">Finance</span>
+                        </a>
+                    </div>
+                </div>
 
-        {{-- Theme toggle --}}
-        <button class="theme-toggle" id="theme-toggle" title="Toggle dark mode">
-            <i class="ph ph-moon"></i>
-            <i class="ph ph-sun"></i>
-        </button>
+                {{-- Light/Dark Toggle --}}
+                <div class="topbar-item">
+                    <button type="button" class="topbar-button" id="light-dark-mode">
+                        <iconify-icon icon="iconamoon:mode-dark-duotone" class="fs-24 align-middle"></iconify-icon>
+                    </button>
+                </div>
 
-        {{-- Notifications --}}
-        <button class="mm-icon-btn" id="notif-btn" title="Notifications">
-            <i class="ph ph-bell" style="font-size:17px;"></i>
-            <span class="mm-notif-pip" style="display:block;"></span>
-        </button>
+                {{-- Notifications --}}
+                <div class="dropdown topbar-item">
+                    <button type="button" class="topbar-button position-relative" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                        <iconify-icon icon="iconamoon:notification-duotone" class="fs-24 align-middle"></iconify-icon>
+                    </button>
+                    <div class="dropdown-menu py-0 dropdown-lg dropdown-menu-end">
+                        <div class="p-3 border-top-0 border-start-0 border-end-0 border-dashed border">
+                            <div class="row align-items-center">
+                                <div class="col">
+                                    <h6 class="m-0 fs-16 fw-semibold">Notifications</h6>
+                                </div>
+                                <div class="col-auto">
+                                    <a href="javascript:void(0);" class="text-dark text-decoration-underline">
+                                        <small>Clear All</small>
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                        <div style="max-height: 280px; overflow-y: auto;">
+                            <div class="p-4 text-center text-muted">
+                                <iconify-icon icon="iconamoon:notification-duotone" class="fs-36 mb-2 d-block"></iconify-icon>
+                                <p class="mb-0">No notifications yet</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
 
-        {{-- Avatar --}}
-        <div class="mm-avt" title="Profile">
-            {{ substr(auth()->user()->name ?? 'A', 0, 1) }}
+                {{-- User Menu --}}
+                <div class="dropdown topbar-item">
+                    <a type="button" class="topbar-button" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                        <span class="d-flex align-items-center">
+                            <img class="rounded-circle" width="32" src="{{ asset('images/users/avatar-1.jpg') }}" alt="User Avatar">
+                        </span>
+                    </a>
+                    <div class="dropdown-menu dropdown-menu-end">
+                        <h6 class="dropdown-header">Welcome!</h6>
+                        <a class="dropdown-item" href="{{ url('/settings') }}">
+                            <i class="bx bx-user-circle text-muted fs-18 align-middle me-1"></i>
+                            <span class="align-middle">Profile</span>
+                        </a>
+                        <a class="dropdown-item" href="{{ url('/settings') }}">
+                            <i class="bx bx-cog text-muted fs-18 align-middle me-1"></i>
+                            <span class="align-middle">Settings</span>
+                        </a>
+                        <a class="dropdown-item" href="{{ url('/audit-log') }}">
+                            <i class="bx bx-shield text-muted fs-18 align-middle me-1"></i>
+                            <span class="align-middle">Audit Log</span>
+                        </a>
+                        <div class="dropdown-divider my-1"></div>
+                        <a class="dropdown-item text-danger" href="{{ url('/logout') }}">
+                            <i class="bx bx-log-out fs-18 align-middle me-1"></i>
+                            <span class="align-middle">Logout</span>
+                        </a>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 </header>

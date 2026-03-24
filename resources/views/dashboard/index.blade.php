@@ -4,133 +4,204 @@
 @section('page-title', 'Dashboard')
 
 @section('content')
-<div class="a-up" style="margin-bottom:2rem;">
-    <div class="hero-pill" style="margin-bottom:12px;">
-        <i class="ph ph-shield-check"></i>
-        Grounded Knowledge Assistant
+
+{{-- Welcome Banner --}}
+<div class="row">
+    <div class="col-12">
+        <div class="card overflow-hidden">
+            <div class="card-body py-4">
+                <div class="row align-items-center">
+                    <div class="col">
+                        <div class="d-flex align-items-center gap-2 mb-2">
+                            <span class="badge bg-primary-subtle text-primary rounded-pill px-3 py-1">
+                                <iconify-icon icon="iconamoon:shield-yes-duotone" class="me-1"></iconify-icon>
+                                Grounded Knowledge Assistant
+                            </span>
+                        </div>
+                        <h3 class="fw-bold mb-1">Welcome to Axiomeer</h3>
+                        <p class="text-muted mb-0">Your governed RAG system for compliance-critical questions across legal, healthcare, and finance domains.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
-    <h1 class="page-title">Welcome to Axiomeer</h1>
-    <p class="page-sub" style="max-width:520px;">
-        Your governed RAG system for compliance-critical questions across legal, healthcare, and finance domains.
-    </p>
 </div>
 
 {{-- KPI Cards --}}
-<div class="grid-4 a-up a-up-1" style="margin-bottom:1.5rem;">
-    <div class="kpi-card">
-        <div class="kpi-icon teal"><i class="ph ph-chat-centered-text"></i></div>
-        <p class="kpi-label">Total Queries</p>
-        <p class="kpi-value" style="color:var(--teal-d);">0</p>
-        <p style="font-size:12px;color:var(--ink-4);margin-top:8px;font-family:var(--f-m);">No queries yet</p>
+<div class="row">
+    <div class="col-md-6 col-xl-3">
+        <div class="card">
+            <div class="card-body">
+                <div class="d-flex align-items-center">
+                    <div class="flex-shrink-0">
+                        <div class="avatar-sm rounded bg-primary-subtle d-flex align-items-center justify-content-center">
+                            <iconify-icon icon="iconamoon:comment-duotone" class="fs-24 text-primary"></iconify-icon>
+                        </div>
+                    </div>
+                    <div class="flex-grow-1 ms-3">
+                        <p class="text-uppercase fw-medium text-muted mb-1 fs-12">Total Queries</p>
+                        <h3 class="mb-0 fw-bold">0</h3>
+                        <p class="text-muted mb-0 fs-12">No queries yet</p>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
-    <div class="kpi-card">
-        <div class="kpi-icon blue"><i class="ph ph-files"></i></div>
-        <p class="kpi-label">Documents Indexed</p>
-        <p class="kpi-value" style="color:var(--blue-d);">0</p>
-        <p style="font-size:12px;color:var(--ink-4);margin-top:8px;font-family:var(--f-m);">Upload to get started</p>
+    <div class="col-md-6 col-xl-3">
+        <div class="card">
+            <div class="card-body">
+                <div class="d-flex align-items-center">
+                    <div class="flex-shrink-0">
+                        <div class="avatar-sm rounded bg-info-subtle d-flex align-items-center justify-content-center">
+                            <iconify-icon icon="iconamoon:file-document-duotone" class="fs-24 text-info"></iconify-icon>
+                        </div>
+                    </div>
+                    <div class="flex-grow-1 ms-3">
+                        <p class="text-uppercase fw-medium text-muted mb-1 fs-12">Documents Indexed</p>
+                        <h3 class="mb-0 fw-bold">0</h3>
+                        <p class="text-muted mb-0 fs-12">Upload to get started</p>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
-    <div class="kpi-card">
-        <div class="kpi-icon amber"><i class="ph ph-chart-line-up"></i></div>
-        <p class="kpi-label">Faithfulness Score</p>
-        <p class="kpi-value" style="color:var(--amber-d);">&mdash;</p>
-        <p style="font-size:12px;color:var(--ink-4);margin-top:8px;font-family:var(--f-m);">RAGAS metric</p>
+    <div class="col-md-6 col-xl-3">
+        <div class="card">
+            <div class="card-body">
+                <div class="d-flex align-items-center">
+                    <div class="flex-shrink-0">
+                        <div class="avatar-sm rounded bg-warning-subtle d-flex align-items-center justify-content-center">
+                            <iconify-icon icon="iconamoon:trend-up-duotone" class="fs-24 text-warning"></iconify-icon>
+                        </div>
+                    </div>
+                    <div class="flex-grow-1 ms-3">
+                        <p class="text-uppercase fw-medium text-muted mb-1 fs-12">Faithfulness Score</p>
+                        <h3 class="mb-0 fw-bold">&mdash;</h3>
+                        <p class="text-muted mb-0 fs-12">RAGAS metric</p>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
-    <div class="kpi-card">
-        <div class="kpi-icon coral"><i class="ph ph-shield-warning"></i></div>
-        <p class="kpi-label">Hallucinations Blocked</p>
-        <p class="kpi-value" style="color:var(--coral-d);">0</p>
-        <p style="font-size:12px;color:var(--ink-4);margin-top:8px;font-family:var(--f-m);">Three-ring defense</p>
+    <div class="col-md-6 col-xl-3">
+        <div class="card">
+            <div class="card-body">
+                <div class="d-flex align-items-center">
+                    <div class="flex-shrink-0">
+                        <div class="avatar-sm rounded bg-danger-subtle d-flex align-items-center justify-content-center">
+                            <iconify-icon icon="iconamoon:shield-yes-duotone" class="fs-24 text-danger"></iconify-icon>
+                        </div>
+                    </div>
+                    <div class="flex-grow-1 ms-3">
+                        <p class="text-uppercase fw-medium text-muted mb-1 fs-12">Hallucinations Blocked</p>
+                        <h3 class="mb-0 fw-bold">0</h3>
+                        <p class="text-muted mb-0 fs-12">Three-ring defense</p>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 </div>
 
-{{-- Two-column layout --}}
-<div class="grid-2 a-up a-up-2">
+{{-- Two Column Layout --}}
+<div class="row">
     {{-- Recent Queries --}}
-    <div class="card-mm" style="overflow:hidden;">
-        <div class="card-header">
-            <div class="card-header-title">
-                <div class="card-header-icon teal"><i class="ph ph-clock-counter-clockwise"></i></div>
-                <span class="card-header-text">Recent Queries</span>
+    <div class="col-xl-6">
+        <div class="card">
+            <div class="card-header d-flex align-items-center justify-content-between">
+                <div class="d-flex align-items-center gap-2">
+                    <div class="avatar-sm rounded bg-primary-subtle d-flex align-items-center justify-content-center">
+                        <iconify-icon icon="iconamoon:history-duotone" class="fs-20 text-primary"></iconify-icon>
+                    </div>
+                    <h5 class="card-title mb-0">Recent Queries</h5>
+                </div>
+                <span class="text-muted fs-12">Today</span>
             </div>
-            <span class="card-header-meta">Today</span>
-        </div>
-        <div style="overflow-x:auto;">
-            <table class="tbl-mm">
-                <thead>
-                    <tr>
-                        <th>Question</th>
-                        <th>Domain</th>
-                        <th>Status</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td colspan="3">
-                            <div class="empty-state" style="padding:2rem;">
-                                <div class="empty-icon" style="width:48px;height:48px;font-size:22px;">
-                                    <i class="ph ph-chat-centered-dots"></i>
-                                </div>
-                                <p style="font-family:var(--f-d);font-size:14px;font-weight:700;margin-bottom:4px;">No queries yet</p>
-                                <p style="font-size:12px;color:var(--ink-3);margin:0;">Ask your first question to get started.</p>
-                            </div>
-                        </td>
-                    </tr>
-                </tbody>
-            </table>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead>
+                            <tr>
+                                <th>Question</th>
+                                <th>Domain</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td colspan="3">
+                                    <div class="text-center py-4">
+                                        <iconify-icon icon="iconamoon:comment-dots-duotone" class="fs-36 text-muted d-block mb-2"></iconify-icon>
+                                        <h6 class="fw-semibold mb-1">No queries yet</h6>
+                                        <p class="text-muted fs-13 mb-0">Ask your first question to get started.</p>
+                                    </div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
         </div>
     </div>
 
     {{-- System Status --}}
-    <div class="card-mm" style="overflow:hidden;">
-        <div class="card-header">
-            <div class="card-header-title">
-                <div class="card-header-icon blue"><i class="ph ph-activity"></i></div>
-                <span class="card-header-text">System Status</span>
+    <div class="col-xl-6">
+        <div class="card">
+            <div class="card-header d-flex align-items-center justify-content-between">
+                <div class="d-flex align-items-center gap-2">
+                    <div class="avatar-sm rounded bg-info-subtle d-flex align-items-center justify-content-center">
+                        <iconify-icon icon="iconamoon:lightning-2-duotone" class="fs-20 text-info"></iconify-icon>
+                    </div>
+                    <h5 class="card-title mb-0">System Status</h5>
+                </div>
+                <span class="badge bg-success-subtle text-success rounded-pill">
+                    <i class="bx bx-check-circle me-1"></i>Online
+                </span>
             </div>
-            <span class="badge-mm badge-teal"><i class="ph ph-check-circle" style="font-size:12px;"></i> Online</span>
-        </div>
-        <div class="card-body">
-            <div style="display:flex;flex-direction:column;gap:12px;">
-                {{-- Agent Pipeline --}}
-                <div style="display:flex;align-items:center;justify-content:space-between;padding:10px;background:var(--s1);border-radius:var(--r-md);border:1px solid var(--border);">
-                    <div style="display:flex;align-items:center;gap:8px;">
-                        <i class="ph ph-robot" style="font-size:16px;color:var(--teal-d);"></i>
-                        <span style="font-size:13px;font-weight:600;">Agent Pipeline</span>
+            <div class="card-body">
+                <div class="d-flex flex-column gap-3">
+                    {{-- Agent Pipeline --}}
+                    <div class="d-flex align-items-center justify-content-between p-2 rounded bg-light">
+                        <div class="d-flex align-items-center gap-2">
+                            <iconify-icon icon="iconamoon:lightning-2-duotone" class="fs-20 text-primary"></iconify-icon>
+                            <span class="fw-medium fs-14">Agent Pipeline</span>
+                        </div>
+                        <span class="badge bg-secondary-subtle text-secondary rounded-pill">Not configured</span>
                     </div>
-                    <span class="badge-mm badge-gray">Not configured</span>
-                </div>
 
-                {{-- Azure AI Search --}}
-                <div style="display:flex;align-items:center;justify-content:space-between;padding:10px;background:var(--s1);border-radius:var(--r-md);border:1px solid var(--border);">
-                    <div style="display:flex;align-items:center;gap:8px;">
-                        <i class="ph ph-magnifying-glass" style="font-size:16px;color:var(--blue-d);"></i>
-                        <span style="font-size:13px;font-weight:600;">Azure AI Search</span>
+                    {{-- Azure AI Search --}}
+                    <div class="d-flex align-items-center justify-content-between p-2 rounded bg-light">
+                        <div class="d-flex align-items-center gap-2">
+                            <iconify-icon icon="iconamoon:search-duotone" class="fs-20 text-info"></iconify-icon>
+                            <span class="fw-medium fs-14">Azure AI Search</span>
+                        </div>
+                        <span class="badge bg-secondary-subtle text-secondary rounded-pill">Not configured</span>
                     </div>
-                    <span class="badge-mm badge-gray">Not configured</span>
-                </div>
 
-                {{-- Content Safety --}}
-                <div style="display:flex;align-items:center;justify-content:space-between;padding:10px;background:var(--s1);border-radius:var(--r-md);border:1px solid var(--border);">
-                    <div style="display:flex;align-items:center;gap:8px;">
-                        <i class="ph ph-shield-check" style="font-size:16px;color:var(--amber-d);"></i>
-                        <span style="font-size:13px;font-weight:600;">Content Safety</span>
+                    {{-- Content Safety --}}
+                    <div class="d-flex align-items-center justify-content-between p-2 rounded bg-light">
+                        <div class="d-flex align-items-center gap-2">
+                            <iconify-icon icon="iconamoon:shield-yes-duotone" class="fs-20 text-warning"></iconify-icon>
+                            <span class="fw-medium fs-14">Content Safety</span>
+                        </div>
+                        <span class="badge bg-secondary-subtle text-secondary rounded-pill">Not configured</span>
                     </div>
-                    <span class="badge-mm badge-gray">Not configured</span>
-                </div>
 
-                {{-- Groundedness API --}}
-                <div style="display:flex;align-items:center;justify-content:space-between;padding:10px;background:var(--s1);border-radius:var(--r-md);border:1px solid var(--border);">
-                    <div style="display:flex;align-items:center;gap:8px;">
-                        <i class="ph ph-target" style="font-size:16px;color:var(--coral-d);"></i>
-                        <span style="font-size:13px;font-weight:600;">Groundedness API</span>
+                    {{-- Groundedness API --}}
+                    <div class="d-flex align-items-center justify-content-between p-2 rounded bg-light">
+                        <div class="d-flex align-items-center gap-2">
+                            <iconify-icon icon="iconamoon:target-duotone" class="fs-20 text-danger"></iconify-icon>
+                            <span class="fw-medium fs-14">Groundedness API</span>
+                        </div>
+                        <span class="badge bg-secondary-subtle text-secondary rounded-pill">Not configured</span>
                     </div>
-                    <span class="badge-mm badge-gray">Not configured</span>
                 </div>
             </div>
         </div>
     </div>
 </div>
+
 @endsection

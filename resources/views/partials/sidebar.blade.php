@@ -1,80 +1,103 @@
-<aside class="sidebar" id="sidebar">
-    {{-- Logo --}}
-    <div class="sidebar-header">
-        <a href="{{ url('/') }}" class="sidebar-logo">
-            <div class="sidebar-logo-mark">
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                    <path d="M8 2L2 14h12L8 2z" stroke="white" stroke-width="1.5" stroke-linejoin="round"/>
-                    <circle cx="8" cy="9" r="2" fill="white" fill-opacity="0.8"/>
-                </svg>
+{{-- Sidebar / Main Nav --}}
+<div class="main-nav">
+    {{-- Brand Logo --}}
+    <div class="logo-box axiomeer-brand">
+        <a href="{{ url('/') }}" class="d-flex align-items-center gap-2 text-decoration-none">
+            <div class="axiomeer-logo-circle">
+                <img src="{{ asset('images/logo.png') }}" alt="Axiomeer">
             </div>
-            <span class="sidebar-logo-text">Axiom<em>eer</em></span>
+            <span class="axiomeer-brand-text logo-lg">Axiomeer</span>
         </a>
     </div>
 
-    {{-- Navigation --}}
-    <nav class="sidebar-nav">
-        {{-- Main --}}
-        <div class="sidebar-section">
-            <p class="sidebar-section-label">Main</p>
+    {{-- Menu Toggle (sm-hover) --}}
+    <button type="button" class="button-sm-hover" aria-label="Show Full Sidebar">
+        <iconify-icon icon="iconamoon:arrow-left-4-square-duotone" class="button-sm-hover-icon"></iconify-icon>
+    </button>
 
-            <a href="{{ url('/dashboard') }}" class="sidebar-link {{ request()->is('dashboard') ? 'active' : '' }}">
-                <i class="ph ph-squares-four"></i>
-                <span>Dashboard</span>
-            </a>
+    <div class="scrollbar" data-simplebar>
+        <ul class="navbar-nav" id="navbar-nav">
 
-            <a href="{{ url('/query') }}" class="sidebar-link {{ request()->is('query*') ? 'active' : '' }}">
-                <i class="ph ph-chat-centered-text"></i>
-                <span>Ask Question</span>
-            </a>
+            {{-- Main --}}
+            <li class="menu-title">Main</li>
 
-            <a href="{{ url('/documents') }}" class="sidebar-link {{ request()->is('documents*') ? 'active' : '' }}">
-                <i class="ph ph-files"></i>
-                <span>Documents</span>
-            </a>
-        </div>
+            <li class="nav-item">
+                <a class="nav-link" href="{{ url('/dashboard') }}">
+                    <span class="nav-icon">
+                        <iconify-icon icon="iconamoon:home-duotone"></iconify-icon>
+                    </span>
+                    <span class="nav-text">Dashboard</span>
+                </a>
+            </li>
 
-        {{-- Analytics --}}
-        <div class="sidebar-section">
-            <p class="sidebar-section-label">Analytics</p>
+            <li class="nav-item">
+                <a class="nav-link" href="{{ url('/query') }}">
+                    <span class="nav-icon">
+                        <iconify-icon icon="iconamoon:comment-duotone"></iconify-icon>
+                    </span>
+                    <span class="nav-text">Ask Question</span>
+                </a>
+            </li>
 
-            <a href="{{ url('/analytics') }}" class="sidebar-link {{ request()->is('analytics*') ? 'active' : '' }}">
-                <i class="ph ph-chart-line-up"></i>
-                <span>Performance</span>
-            </a>
+            <li class="nav-item">
+                <a class="nav-link" href="{{ url('/documents') }}">
+                    <span class="nav-icon">
+                        <iconify-icon icon="iconamoon:file-document-duotone"></iconify-icon>
+                    </span>
+                    <span class="nav-text">Documents</span>
+                </a>
+            </li>
 
-            <a href="{{ url('/audit-log') }}" class="sidebar-link {{ request()->is('audit-log*') ? 'active' : '' }}">
-                <i class="ph ph-shield-check"></i>
-                <span>Audit Log</span>
-            </a>
+            {{-- Analytics --}}
+            <li class="menu-title">Analytics</li>
 
-            <a href="{{ url('/evaluation') }}" class="sidebar-link {{ request()->is('evaluation*') ? 'active' : '' }}">
-                <i class="ph ph-exam"></i>
-                <span>RAGAS Metrics</span>
-            </a>
-        </div>
+            <li class="nav-item">
+                <a class="nav-link" href="{{ url('/analytics') }}">
+                    <span class="nav-icon">
+                        <iconify-icon icon="iconamoon:trend-up-duotone"></iconify-icon>
+                    </span>
+                    <span class="nav-text">Performance</span>
+                </a>
+            </li>
 
-        {{-- System --}}
-        <div class="sidebar-section">
-            <p class="sidebar-section-label">System</p>
+            <li class="nav-item">
+                <a class="nav-link" href="{{ url('/audit-log') }}">
+                    <span class="nav-icon">
+                        <iconify-icon icon="iconamoon:shield-yes-duotone"></iconify-icon>
+                    </span>
+                    <span class="nav-text">Audit Log</span>
+                </a>
+            </li>
 
-            <a href="{{ url('/settings') }}" class="sidebar-link {{ request()->is('settings*') ? 'active' : '' }}">
-                <i class="ph ph-gear"></i>
-                <span>Settings</span>
-            </a>
+            <li class="nav-item">
+                <a class="nav-link" href="{{ url('/evaluation') }}">
+                    <span class="nav-icon">
+                        <iconify-icon icon="iconamoon:certificate-badge-duotone"></iconify-icon>
+                    </span>
+                    <span class="nav-text">RAGAS Metrics</span>
+                </a>
+            </li>
 
-            <a href="{{ url('/agents') }}" class="sidebar-link {{ request()->is('agents*') ? 'active' : '' }}">
-                <i class="ph ph-robot"></i>
-                <span>Agent Pipeline</span>
-            </a>
-        </div>
-    </nav>
+            {{-- System --}}
+            <li class="menu-title">System</li>
 
-    {{-- Sidebar footer --}}
-    <div class="sidebar-footer">
-        <a href="{{ url('/settings') }}" class="sidebar-link">
-            <i class="ph ph-question"></i>
-            <span>Help & Docs</span>
-        </a>
+            <li class="nav-item">
+                <a class="nav-link" href="{{ url('/settings') }}">
+                    <span class="nav-icon">
+                        <iconify-icon icon="iconamoon:settings-duotone"></iconify-icon>
+                    </span>
+                    <span class="nav-text">Settings</span>
+                </a>
+            </li>
+
+            <li class="nav-item">
+                <a class="nav-link" href="{{ url('/agents') }}">
+                    <span class="nav-icon">
+                        <iconify-icon icon="iconamoon:lightning-2-duotone"></iconify-icon>
+                    </span>
+                    <span class="nav-text">Agent Pipeline</span>
+                </a>
+            </li>
+        </ul>
     </div>
-</aside>
+</div>
