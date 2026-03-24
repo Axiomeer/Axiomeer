@@ -34,6 +34,7 @@
     color: var(--bs-body-color);
     letter-spacing: -0.3px;
     white-space: nowrap;
+
 }
 [data-bs-theme="dark"] .axiomeer-logo-circle {
     background: rgba(255,255,255,0.1);

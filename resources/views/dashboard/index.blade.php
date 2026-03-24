@@ -40,8 +40,8 @@
                     </div>
                     <div class="flex-grow-1 ms-3">
                         <p class="text-uppercase fw-medium text-muted mb-1 fs-12">Total Queries</p>
-                        <h3 class="mb-0 fw-bold">0</h3>
-                        <p class="text-muted mb-0 fs-12">No queries yet</p>
+                        <h3 class="mb-0 fw-bold">{{ number_format($totalQueries) }}</h3>
+                        <p class="text-muted mb-0 fs-12">{{ $totalQueries ? 'All time' : 'No queries yet' }}</p>
                     </div>
                 </div>
             </div>
@@ -59,8 +59,8 @@
                     </div>
                     <div class="flex-grow-1 ms-3">
                         <p class="text-uppercase fw-medium text-muted mb-1 fs-12">Documents Indexed</p>
-                        <h3 class="mb-0 fw-bold">0</h3>
-                        <p class="text-muted mb-0 fs-12">Upload to get started</p>
+                        <h3 class="mb-0 fw-bold">{{ $documentsIndexed }} / {{ $totalDocuments }}</h3>
+                        <p class="text-muted mb-0 fs-12">{{ $totalDocuments ? 'Total uploaded' : 'Upload to get started' }}</p>
                     </div>
                 </div>
             </div>
@@ -78,7 +78,7 @@
                     </div>
                     <div class="flex-grow-1 ms-3">
                         <p class="text-uppercase fw-medium text-muted mb-1 fs-12">Faithfulness Score</p>
-                        <h3 class="mb-0 fw-bold">&mdash;</h3>
+                        <h3 class="mb-0 fw-bold">{{ $avgFaithfulness ? number_format($avgFaithfulness * 100, 1) . '%' : '&mdash;' }}</h3>
                         <p class="text-muted mb-0 fs-12">RAGAS metric</p>
                     </div>
                 </div>
@@ -97,7 +97,7 @@
                     </div>
                     <div class="flex-grow-1 ms-3">
                         <p class="text-uppercase fw-medium text-muted mb-1 fs-12">Hallucinations Blocked</p>
-                        <h3 class="mb-0 fw-bold">0</h3>
+                        <h3 class="mb-0 fw-bold">{{ number_format($hallucinationsBlocked) }}</h3>
                         <p class="text-muted mb-0 fs-12">Three-ring defense</p>
                     </div>
                 </div>
@@ -131,15 +131,34 @@
                             </tr>
                         </thead>
                         <tbody>
-                            <tr>
-                                <td colspan="3">
-                                    <div class="text-center py-4">
-                                        <iconify-icon icon="iconamoon:comment-dots-duotone" class="fs-36 text-muted d-block mb-2"></iconify-icon>
-                                        <h6 class="fw-semibold mb-1">No queries yet</h6>
-                                        <p class="text-muted fs-13 mb-0">Ask your first question to get started.</p>
-                                    </div>
-                                </td>
-                            </tr>
+                            @forelse ($recentQueries as $q)
+                                <tr>
+                                    <td>{{ Str::limit($q->question, 50) }}</td>
+                                    <td>
+                                        <span class="badge bg-{{ $q->domain->color ?? 'secondary' }}-subtle text-{{ $q->domain->color ?? 'secondary' }}">
+                                            {{ $q->domain->display_name ?? 'N/A' }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        @php
+                                            $sc = ['pending' => 'warning', 'processing' => 'info', 'completed' => 'success', 'failed' => 'danger'];
+                                        @endphp
+                                        <span class="badge bg-{{ $sc[$q->status] ?? 'secondary' }}-subtle text-{{ $sc[$q->status] ?? 'secondary' }}">
+                                            {{ ucfirst($q->status) }}
+                                        </span>
+                                    </td>
+                                </tr>
+                            @empty
+                                <tr>
+                                    <td colspan="3">
+                                        <div class="text-center py-4">
+                                            <iconify-icon icon="iconamoon:comment-dots-duotone" class="fs-36 text-muted d-block mb-2"></iconify-icon>
+                                            <h6 class="fw-semibold mb-1">No queries yet</h6>
+                                            <p class="text-muted fs-13 mb-0">Ask your first question to get started.</p>
+                                        </div>
+                                    </td>
+                                </tr>
+                            @endforelse
                         </tbody>
                     </table>
                 </div>
