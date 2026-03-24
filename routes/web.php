@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\AgentPipelineController;
 use App\Http\Controllers\AnalyticsController;
 use App\Http\Controllers\AuditLogController;
 use App\Http\Controllers\DashboardController;
@@ -7,6 +8,7 @@ use App\Http\Controllers\DocumentController;
 use App\Http\Controllers\EvaluationController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\QueryController;
+use App\Http\Controllers\SettingsController;
 use Illuminate\Support\Facades\Route;
 
 // Guest redirect to login
@@ -39,8 +41,8 @@ Route::middleware('auth')->group(function () {
 
     // System (admin only)
     Route::middleware('role:admin')->group(function () {
-        Route::get('/settings', fn () => view('pages.coming-soon', ['page' => 'Settings']))->name('settings');
-        Route::get('/agents', fn () => view('pages.coming-soon', ['page' => 'Agent Pipeline']))->name('agents');
+        Route::get('/settings', [SettingsController::class, 'index'])->name('settings');
+        Route::get('/agents', [AgentPipelineController::class, 'index'])->name('agents');
     });
 });
 
