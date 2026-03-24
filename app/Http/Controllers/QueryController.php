@@ -4,10 +4,15 @@ namespace App\Http\Controllers;
 
 use App\Models\Domain;
 use App\Models\Query;
+use App\Services\RAGPipelineService;
 use Illuminate\Http\Request;
 
 class QueryController extends Controller
 {
+    public function __construct(
+        private RAGPipelineService $pipeline,
+    ) {}
+
     public function index()
     {
         $queries = Query::with(['domain', 'user'])
@@ -34,11 +39,17 @@ class QueryController extends Controller
             'status' => 'pending',
         ]);
 
-        // In a real implementation, this would dispatch a job to the
-        // Azure AI agent pipeline. For now, we simulate a pending state.
+        // Run the RAG pipeline synchronously (demo mode).
+        // In production, this would be dispatched as a queued job.
+        $query = $this->pipeline->process($query);
+
+        $flashKey = $query->status === 'completed' ? 'success' : 'error';
+        $flashMsg = $query->status === 'completed'
+            ? 'Your question has been answered.'
+            : 'Processing encountered an issue. See details below.';
 
         return redirect()->route('query.show', $query)
-            ->with('success', 'Your question has been submitted and is being processed.');
+            ->with($flashKey, $flashMsg);
     }
 
     public function show(Query $query)
