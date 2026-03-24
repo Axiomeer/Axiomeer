@@ -3,6 +3,7 @@
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DocumentController;
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\QueryController;
 use Illuminate\Support\Facades\Route;
 
 // Guest redirect to login
@@ -21,7 +22,7 @@ Route::middleware('auth')->group(function () {
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 
     // Query (all roles)
-    Route::get('/query', fn () => view('pages.coming-soon', ['page' => 'Ask Question']))->name('query');
+    Route::resource('query', QueryController::class)->only(['index', 'store', 'show']);
 
     // Documents (all roles)
     Route::resource('documents', DocumentController::class)->except(['edit', 'update']);
