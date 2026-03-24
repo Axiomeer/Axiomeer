@@ -84,24 +84,29 @@
                         </span>
                     </a>
                     <div class="dropdown-menu dropdown-menu-end">
-                        <h6 class="dropdown-header">Welcome!</h6>
-                        <a class="dropdown-item" href="{{ url('/settings') }}">
+                        <h6 class="dropdown-header">{{ auth()->user()->name ?? 'Welcome' }}</h6>
+                        <span class="dropdown-item-text text-muted fs-12">{{ ucfirst(auth()->user()->role ?? 'viewer') }}</span>
+                        <div class="dropdown-divider my-1"></div>
+                        <a class="dropdown-item" href="{{ route('profile.edit') }}">
                             <i class="bx bx-user-circle text-muted fs-18 align-middle me-1"></i>
                             <span class="align-middle">Profile</span>
                         </a>
-                        <a class="dropdown-item" href="{{ url('/settings') }}">
+                        <a class="dropdown-item" href="{{ route('settings') }}">
                             <i class="bx bx-cog text-muted fs-18 align-middle me-1"></i>
                             <span class="align-middle">Settings</span>
                         </a>
-                        <a class="dropdown-item" href="{{ url('/audit-log') }}">
+                        <a class="dropdown-item" href="{{ route('audit-log') }}">
                             <i class="bx bx-shield text-muted fs-18 align-middle me-1"></i>
                             <span class="align-middle">Audit Log</span>
                         </a>
                         <div class="dropdown-divider my-1"></div>
-                        <a class="dropdown-item text-danger" href="{{ url('/logout') }}">
-                            <i class="bx bx-log-out fs-18 align-middle me-1"></i>
-                            <span class="align-middle">Logout</span>
-                        </a>
+                        <form method="POST" action="{{ route('logout') }}">
+                            @csrf
+                            <button type="submit" class="dropdown-item text-danger">
+                                <i class="bx bx-log-out fs-18 align-middle me-1"></i>
+                                <span class="align-middle">Logout</span>
+                            </button>
+                        </form>
                     </div>
                 </div>
             </div>
