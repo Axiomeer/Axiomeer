@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Document;
 use App\Models\Domain;
+use App\Services\Azure\AzureSearchService;
 use App\Services\Azure\DocumentIntelligenceService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -13,6 +14,7 @@ class DocumentController extends Controller
 {
     public function __construct(
         private DocumentIntelligenceService $docIntelligence,
+        private AzureSearchService $searchService,
     ) {}
     public function index(Request $request)
     {
@@ -71,15 +73,29 @@ class DocumentController extends Controller
         $analysis = $this->docIntelligence->analyzeDocument($path);
 
         if ($analysis['success']) {
+            $chunks = $analysis['chunks'] ?? [];
+            $domain = Domain::find($request->domain_id);
+
+            // Push chunks to Azure AI Search index
+            $indexResult = $this->searchService->indexDocumentChunks(
+                (string) $document->id,
+                $request->title,
+                $domain->slug ?? 'general',
+                $chunks,
+            );
+
             $document->update([
                 'status' => 'indexed',
                 'chunk_count' => $analysis['chunk_count'] ?? 0,
+                'index_name' => config('azure.search.index'),
                 'indexed_at' => now(),
                 'metadata' => [
                     'page_count' => $analysis['page_count'] ?? 0,
                     'tables_found' => $analysis['tables_found'] ?? 0,
                     'paragraphs_found' => $analysis['paragraphs_found'] ?? 0,
-                    'mock' => $analysis['mock'] ?? false,
+                    'chunks_indexed' => $indexResult['indexed'] ?? 0,
+                    'mock_parse' => $analysis['mock'] ?? false,
+                    'mock_index' => $indexResult['mock'] ?? false,
                 ],
             ]);
         } else {
@@ -101,6 +117,11 @@ class DocumentController extends Controller
 
     public function destroy(Document $document)
     {
+        // Remove chunks from search index
+        if ($document->chunk_count > 0) {
+            $this->searchService->removeDocument((string) $document->id, $document->chunk_count);
+        }
+
         Storage::disk('local')->delete($document->storage_path);
         $title = $document->title;
         $document->delete();
