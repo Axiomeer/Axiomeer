@@ -1,7 +1,10 @@
 <?php
 
+use App\Http\Controllers\AnalyticsController;
+use App\Http\Controllers\AuditLogController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DocumentController;
+use App\Http\Controllers\EvaluationController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\QueryController;
 use Illuminate\Support\Facades\Route;
@@ -29,9 +32,9 @@ Route::middleware('auth')->group(function () {
 
     // Analytics (admin + analyst)
     Route::middleware('role:admin,analyst')->group(function () {
-        Route::get('/analytics', fn () => view('pages.coming-soon', ['page' => 'Performance']))->name('analytics');
-        Route::get('/audit-log', fn () => view('pages.coming-soon', ['page' => 'Audit Log']))->name('audit-log');
-        Route::get('/evaluation', fn () => view('pages.coming-soon', ['page' => 'RAGAS Metrics']))->name('evaluation');
+        Route::get('/analytics', [AnalyticsController::class, 'index'])->name('analytics');
+        Route::get('/audit-log', [AuditLogController::class, 'index'])->name('audit-log');
+        Route::get('/evaluation', [EvaluationController::class, 'index'])->name('evaluation');
     });
 
     // System (admin only)
