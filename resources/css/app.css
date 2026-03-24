@@ -3,39 +3,6 @@
  * Built on Reback / Bootstrap 5 design system
  */
 
-/* Domain selector label */
-.axiomeer-domain-label {
-    font-size: 13px;
-}
-
-/* Domain indicator pills */
-.domain-pill {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 4px 12px;
-    border-radius: 999px;
-    font-size: 11px;
-    font-weight: 600;
-}
-.domain-pill.legal    { background: rgba(var(--bs-primary-rgb), 0.1);  color: var(--bs-primary); }
-.domain-pill.health   { background: rgba(var(--bs-success-rgb), 0.1);  color: var(--bs-success); }
-.domain-pill.finance  { background: rgba(var(--bs-warning-rgb), 0.1);  color: var(--bs-warning); }
-
-/* Safety status indicators */
-.safety-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    padding: 4px 10px;
-    border-radius: 999px;
-    font-size: 11px;
-    font-weight: 700;
-}
-.safety-badge.green  { background: rgba(var(--bs-success-rgb), 0.15); color: var(--bs-success); }
-.safety-badge.amber  { background: rgba(var(--bs-warning-rgb), 0.15); color: var(--bs-warning); }
-.safety-badge.red    { background: rgba(var(--bs-danger-rgb), 0.15);  color: var(--bs-danger); }
-
 /* Axiomeer brand in sidebar */
 .logo-box.axiomeer-brand {
     display: flex !important;
@@ -77,9 +44,55 @@
     color: #fff;
 }
 
+/* Domain selector label */
+.axiomeer-domain-label {
+    font-size: 13px;
+}
+
+/* Domain indicator pills */
+.domain-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 12px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 600;
+}
+.domain-pill.legal    { background: rgba(var(--bs-primary-rgb), 0.1);  color: var(--bs-primary); }
+.domain-pill.health   { background: rgba(var(--bs-success-rgb), 0.1);  color: var(--bs-success); }
+.domain-pill.finance  { background: rgba(var(--bs-warning-rgb), 0.1);  color: var(--bs-warning); }
+
+/* Safety status indicators */
+.safety-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 700;
+}
+.safety-badge.green  { background: rgba(var(--bs-success-rgb), 0.15); color: var(--bs-success); }
+.safety-badge.amber  { background: rgba(var(--bs-warning-rgb), 0.15); color: var(--bs-warning); }
+.safety-badge.red    { background: rgba(var(--bs-danger-rgb), 0.15);  color: var(--bs-danger); }
+
 /* Card header icon boxes (consistent sizing) */
 .card-header .avatar-sm {
     width: 32px;
     height: 32px;
     min-width: 32px;
+}
+
+/* Auth pages */
+.auth-page {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bs-body-bg);
+}
+.auth-card {
+    width: 100%;
+    max-width: 440px;
 }

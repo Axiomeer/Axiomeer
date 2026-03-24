@@ -2,6 +2,10 @@
  * Axiomeer — Application JavaScript
  */
 import './bootstrap';
+import Alpine from 'alpinejs';
+
+window.Alpine = Alpine;
+Alpine.start();
 
 /**
  * Domain Selector — persist selection in localStorage
@@ -11,7 +15,6 @@ document.addEventListener('DOMContentLoaded', function () {
     const domainItems = document.querySelectorAll('.axiomeer-domain-item');
     const saved = localStorage.getItem('axiomeer-domain') || 'legal';
 
-    // Apply saved domain on load
     if (domainLabel) {
         domainLabel.textContent = saved.charAt(0).toUpperCase() + saved.slice(1);
     }

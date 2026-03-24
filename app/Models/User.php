@@ -22,7 +22,33 @@ class User extends Authenticatable
         'name',
         'email',
         'password',
+        'role',
     ];
+
+    public function isAdmin(): bool
+    {
+        return $this->role === 'admin';
+    }
+
+    public function isAnalyst(): bool
+    {
+        return in_array($this->role, ['admin', 'analyst']);
+    }
+
+    public function queries(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(Query::class);
+    }
+
+    public function documents(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(Document::class, 'uploaded_by');
+    }
+
+    public function auditLogs(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(AuditLog::class);
+    }
 
     /**
      * The attributes that should be hidden for serialization.
