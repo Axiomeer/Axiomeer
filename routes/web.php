@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\DocumentController;
 use App\Http\Controllers\ProfileController;
 use Illuminate\Support\Facades\Route;
 
@@ -19,9 +20,11 @@ Route::middleware('auth')->group(function () {
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 
-    // Query, Documents (all roles)
+    // Query (all roles)
     Route::get('/query', fn () => view('pages.coming-soon', ['page' => 'Ask Question']))->name('query');
-    Route::get('/documents', fn () => view('pages.coming-soon', ['page' => 'Documents']))->name('documents');
+
+    // Documents (all roles)
+    Route::resource('documents', DocumentController::class)->except(['edit', 'update']);
 
     // Analytics (admin + analyst)
     Route::middleware('role:admin,analyst')->group(function () {
