@@ -210,7 +210,7 @@
                         <tbody>
                             @forelse ($recentEvaluations as $eval)
                                 <tr>
-                                    <td class="fs-13">{{ Str::limit($eval->query->question ?? 'N/A', 50) }}</td>
+                                    <td class="fs-13">{{ Str::limit($eval->relatedQuery->question ?? 'N/A', 50) }}</td>
                                     <td>
                                         <span class="badge bg-{{ $eval->domain->color ?? 'secondary' }}-subtle text-{{ $eval->domain->color ?? 'secondary' }}">
                                             {{ $eval->domain->display_name ?? 'N/A' }}

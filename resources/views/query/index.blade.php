@@ -58,10 +58,17 @@
                     </div>
 
                     {{-- Submit --}}
-                    <button type="submit" class="btn btn-primary">
-                        <iconify-icon icon="iconamoon:send-duotone" class="me-1"></iconify-icon>
-                        Submit Question
-                    </button>
+                    <div class="d-flex gap-2 align-items-center">
+                        <button type="submit" class="btn btn-primary">
+                            <iconify-icon icon="iconamoon:send-duotone" class="me-1"></iconify-icon>
+                            Submit Question
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary" id="mic-btn" title="Speak your question">
+                            <iconify-icon icon="iconamoon:microphone-duotone" id="mic-icon"></iconify-icon>
+                            <span id="mic-label" class="ms-1 d-none d-md-inline">Voice</span>
+                        </button>
+                        <span id="mic-status" class="text-muted fs-12 d-none">Listening...</span>
+                    </div>
                 </form>
             </div>
         </div>
@@ -220,3 +227,104 @@
 </div>
 
 @endsection
+
+@push('scripts')
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const micBtn = document.getElementById('mic-btn');
+    const micIcon = document.getElementById('mic-icon');
+    const micStatus = document.getElementById('mic-status');
+    const textarea = document.getElementById('question');
+
+    if (!micBtn || !textarea) return;
+
+    let recognizing = false;
+    let recognition = null;
+
+    // Try Web Speech API first (works in Chrome/Edge)
+    if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        recognition = new SpeechRecognition();
+        recognition.continuous = true;
+        recognition.interimResults = true;
+        recognition.lang = 'en-US';
+
+        recognition.onstart = function () {
+            recognizing = true;
+            micBtn.classList.remove('btn-outline-secondary');
+            micBtn.classList.add('btn-danger');
+            micIcon.setAttribute('icon', 'iconamoon:microphone-duotone');
+            micStatus.classList.remove('d-none');
+            micStatus.textContent = 'Listening...';
+        };
+
+        recognition.onresult = function (event) {
+            let finalTranscript = '';
+            let interimTranscript = '';
+            for (let i = event.resultIndex; i < event.results.length; i++) {
+                if (event.results[i].isFinal) {
+                    finalTranscript += event.results[i][0].transcript;
+                } else {
+                    interimTranscript += event.results[i][0].transcript;
+                }
+            }
+            if (finalTranscript) {
+                textarea.value += finalTranscript;
+            }
+            if (interimTranscript) {
+                micStatus.textContent = interimTranscript;
+            }
+        };
+
+        recognition.onerror = function (event) {
+            console.error('Speech recognition error:', event.error);
+            stopRecognition();
+            if (event.error === 'not-allowed') {
+                micStatus.textContent = 'Microphone access denied';
+                micStatus.classList.remove('d-none');
+            }
+        };
+
+        recognition.onend = function () {
+            stopRecognition();
+        };
+
+        micBtn.addEventListener('click', function () {
+            if (recognizing) {
+                recognition.stop();
+            } else {
+                recognition.start();
+            }
+        });
+    } else {
+        // Fallback: use Azure Speech token endpoint
+        micBtn.addEventListener('click', async function () {
+            if (recognizing) return;
+
+            try {
+                micStatus.classList.remove('d-none');
+                micStatus.textContent = 'Connecting to Azure Speech...';
+                const resp = await fetch('{{ route("api.speech-token") }}');
+                const data = await resp.json();
+
+                if (data.error) {
+                    micStatus.textContent = 'Speech not available: ' + data.error;
+                    return;
+                }
+
+                micStatus.textContent = 'Azure Speech token obtained. Use a browser with Web Speech API (Chrome/Edge) for best results.';
+            } catch (e) {
+                micStatus.textContent = 'Speech service unavailable';
+            }
+        });
+    }
+
+    function stopRecognition() {
+        recognizing = false;
+        micBtn.classList.remove('btn-danger');
+        micBtn.classList.add('btn-outline-secondary');
+        micStatus.classList.add('d-none');
+    }
+});
+</script>
+@endpush

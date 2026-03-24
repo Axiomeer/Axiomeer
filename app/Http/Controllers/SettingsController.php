@@ -6,6 +6,7 @@ use App\Models\Domain;
 use App\Services\Azure\AzureOpenAIService;
 use App\Services\Azure\AzureSearchService;
 use App\Services\Azure\ContentSafetyService;
+use App\Services\Azure\DocumentIntelligenceService;
 
 class SettingsController extends Controller
 {
@@ -13,6 +14,7 @@ class SettingsController extends Controller
         AzureOpenAIService $openai,
         AzureSearchService $search,
         ContentSafetyService $safety,
+        DocumentIntelligenceService $docIntelligence,
     ) {
         // Azure service connection status
         $services = [
@@ -63,6 +65,14 @@ class SettingsController extends Controller
                 'configured' => !empty(config('azure.speech.api_key')),
                 'endpoint' => config('azure.speech.endpoint'),
                 'details' => 'Region: ' . config('azure.speech.region'),
+            ],
+            [
+                'name' => 'Document Intelligence',
+                'icon' => 'iconamoon:scan-duotone',
+                'color' => 'primary',
+                'configured' => $docIntelligence->isConfigured(),
+                'endpoint' => config('azure.document_intelligence.endpoint'),
+                'details' => 'PDF, images, Office docs parsing',
             ],
         ];
 

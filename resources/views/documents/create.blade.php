@@ -56,8 +56,8 @@
                         <label for="file" class="form-label">File <span class="text-danger">*</span></label>
                         <input type="file" class="form-control @error('file') is-invalid @enderror"
                                id="file" name="file"
-                               accept=".pdf,.doc,.docx,.txt,.csv,.json">
-                        <div class="form-text">Accepted formats: PDF, DOC, DOCX, TXT, CSV, JSON. Max size: 50 MB.</div>
+                               accept=".pdf,.doc,.docx,.txt,.csv,.json,.jpg,.jpeg,.png,.bmp,.tiff,.heif,.xlsx,.pptx,.html">
+                        <div class="form-text">Accepted: PDF, DOCX, TXT, CSV, JSON, images (JPG/PNG/BMP/TIFF), XLSX, PPTX, HTML. Max 50 MB. Parsed via Azure Document Intelligence.</div>
                         @error('file')
                             <div class="invalid-feedback">{{ $message }}</div>
                         @enderror

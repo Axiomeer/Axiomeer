@@ -112,7 +112,7 @@
                     <ul class="list-group list-group-flush">
                         @foreach ($document->citations->take(10) as $citation)
                             <li class="list-group-item px-0">
-                                <div class="fw-medium fs-13">{{ Str::limit($citation->query->question ?? 'Query', 60) }}</div>
+                                <div class="fw-medium fs-13">{{ Str::limit($citation->relatedQuery->question ?? 'Query', 60) }}</div>
                                 <small class="text-muted">
                                     Relevance: {{ number_format($citation->relevance_score * 100, 0) }}%
                                     @if ($citation->page_number)
