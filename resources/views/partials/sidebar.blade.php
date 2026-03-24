@@ -78,6 +78,16 @@
                 </a>
             </li>
 
+            {{-- Responsible AI --}}
+            <li class="nav-item">
+                <a class="nav-link" href="{{ url('/responsible-ai') }}">
+                    <span class="nav-icon">
+                        <iconify-icon icon="iconamoon:eye-duotone"></iconify-icon>
+                    </span>
+                    <span class="nav-text">Responsible AI</span>
+                </a>
+            </li>
+
             {{-- System --}}
             <li class="menu-title">System</li>
 

@@ -32,6 +32,9 @@ Route::middleware('auth')->group(function () {
     // Documents (all roles)
     Route::resource('documents', DocumentController::class)->except(['edit', 'update']);
 
+    // Responsible AI (all roles)
+    Route::get('/responsible-ai', fn () => view('responsible-ai.index'))->name('responsible-ai');
+
     // Analytics (admin + analyst)
     Route::middleware('role:admin,analyst')->group(function () {
         Route::get('/analytics', [AnalyticsController::class, 'index'])->name('analytics');
@@ -44,6 +47,11 @@ Route::middleware('auth')->group(function () {
         Route::get('/settings', [SettingsController::class, 'index'])->name('settings');
         Route::get('/agents', [AgentPipelineController::class, 'index'])->name('agents');
     });
+});
+
+// API endpoints (authenticated)
+Route::middleware('auth')->prefix('api')->group(function () {
+    Route::get('/speech-token', \App\Http\Controllers\Api\SpeechTokenController::class)->name('api.speech-token');
 });
 
 require __DIR__.'/auth.php';

@@ -218,9 +218,9 @@
                                 </span>
                             </td>
                             <td class="fs-13">
-                                @if ($run->query)
+                                @if ($run->relatedQuery)
                                     <a href="{{ route('query.show', $run->query_id) }}" class="text-decoration-none">
-                                        {{ Str::limit($run->query->question ?? 'Query #' . $run->query_id, 40) }}
+                                        {{ Str::limit($run->relatedQuery->question ?? 'Query #' . $run->query_id, 40) }}
                                     </a>
                                 @else
                                     <span class="text-muted">—</span>

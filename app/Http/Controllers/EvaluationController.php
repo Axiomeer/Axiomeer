@@ -39,7 +39,7 @@ class EvaluationController extends Controller
         });
 
         // Recent evaluations
-        $recentEvaluations = EvaluationMetric::with(['query', 'domain'])
+        $recentEvaluations = EvaluationMetric::with(['relatedQuery', 'domain'])
             ->latest()
             ->take(10)
             ->get();

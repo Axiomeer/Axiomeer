@@ -25,9 +25,9 @@ class EvaluationMetric extends Model
         'details' => 'array',
     ];
 
-    public function query(): BelongsTo
+    public function relatedQuery(): BelongsTo
     {
-        return $this->belongsTo(Query::class);
+        return $this->belongsTo(Query::class, 'query_id');
     }
 
     public function domain(): BelongsTo

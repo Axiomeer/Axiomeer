@@ -52,7 +52,7 @@ class AgentPipelineController extends Controller
         }
 
         // Recent agent runs
-        $query = AgentRun::with('query')->latest();
+        $query = AgentRun::with('relatedQuery')->latest();
 
         if ($request->filled('agent_type')) {
             $query->where('agent_type', $request->agent_type);

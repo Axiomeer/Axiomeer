@@ -69,4 +69,15 @@ return [
         'region' => env('AZURE_SPEECH_REGION', 'eastus'),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Azure Document Intelligence (Form Recognizer)
+    |--------------------------------------------------------------------------
+    */
+    'document_intelligence' => [
+        'endpoint' => env('AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT'),
+        'api_key' => env('AZURE_DOCUMENT_INTELLIGENCE_KEY'),
+        'api_version' => env('AZURE_DOCUMENT_INTELLIGENCE_API_VERSION', '2024-11-30'),
+    ],
+
 ];
