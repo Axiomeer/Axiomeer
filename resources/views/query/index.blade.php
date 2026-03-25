@@ -226,6 +226,55 @@
     </div>
 </div>
 
+{{-- Pipeline Loading Overlay --}}
+<div id="pipeline-overlay" class="d-none position-fixed top-0 start-0 w-100 h-100" style="z-index: 9999; background: rgba(0,0,0,0.6); backdrop-filter: blur(4px);">
+    <div class="d-flex align-items-center justify-content-center h-100">
+        <div class="card shadow-lg" style="max-width: 520px; width: 90%;">
+            <div class="card-body p-4 text-center">
+                <iconify-icon icon="iconamoon:lightning-2-duotone" class="fs-36 text-primary d-block mb-2"></iconify-icon>
+                <h5 class="fw-semibold mb-1">Processing Your Query</h5>
+                <p class="text-muted fs-13 mb-4">Running the multi-agent RAG pipeline...</p>
+
+                {{-- Pipeline Steps --}}
+                <div class="d-flex align-items-center justify-content-between position-relative mb-4 px-2">
+                    <div class="position-absolute" style="top: 20px; left: 50px; right: 50px; height: 3px; background: var(--bs-border-color); z-index: 0;">
+                        <div id="pipeline-progress-line" style="height: 100%; width: 0%; background: var(--bs-primary); transition: width 0.8s ease;"></div>
+                    </div>
+
+                    <div class="text-center position-relative" style="z-index: 1; flex: 1;" id="step-safety">
+                        <div class="rounded-circle d-flex align-items-center justify-content-center mx-auto mb-1 border border-2 border-secondary bg-body" style="width: 40px; height: 40px; transition: all 0.4s ease;" id="step-safety-circle">
+                            <i class="bx bx-time-five text-secondary fs-18" id="step-safety-icon"></i>
+                        </div>
+                        <div class="fw-semibold fs-12">Safety</div>
+                    </div>
+                    <div class="text-center position-relative" style="z-index: 1; flex: 1;" id="step-retrieval">
+                        <div class="rounded-circle d-flex align-items-center justify-content-center mx-auto mb-1 border border-2 border-secondary bg-body" style="width: 40px; height: 40px; transition: all 0.4s ease;" id="step-retrieval-circle">
+                            <i class="bx bx-time-five text-secondary fs-18" id="step-retrieval-icon"></i>
+                        </div>
+                        <div class="fw-semibold fs-12">Retrieval</div>
+                    </div>
+                    <div class="text-center position-relative" style="z-index: 1; flex: 1;" id="step-generation">
+                        <div class="rounded-circle d-flex align-items-center justify-content-center mx-auto mb-1 border border-2 border-secondary bg-body" style="width: 40px; height: 40px; transition: all 0.4s ease;" id="step-generation-circle">
+                            <i class="bx bx-time-five text-secondary fs-18" id="step-generation-icon"></i>
+                        </div>
+                        <div class="fw-semibold fs-12">Generation</div>
+                    </div>
+                    <div class="text-center position-relative" style="z-index: 1; flex: 1;" id="step-verification">
+                        <div class="rounded-circle d-flex align-items-center justify-content-center mx-auto mb-1 border border-2 border-secondary bg-body" style="width: 40px; height: 40px; transition: all 0.4s ease;" id="step-verification-circle">
+                            <i class="bx bx-time-five text-secondary fs-18" id="step-verification-icon"></i>
+                        </div>
+                        <div class="fw-semibold fs-12">Verification</div>
+                    </div>
+                </div>
+
+                <div id="pipeline-status-text" class="text-muted fs-13">
+                    <i class="bx bx-loader-alt bx-spin me-1"></i> Initializing pipeline...
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 @endsection
 
 @push('scripts')
@@ -324,6 +373,51 @@ document.addEventListener('DOMContentLoaded', function () {
         micBtn.classList.remove('btn-danger');
         micBtn.classList.add('btn-outline-secondary');
         micStatus.classList.add('d-none');
+    }
+
+    // Pipeline loading overlay on form submit
+    const form = document.querySelector('form[action*="query"]');
+    if (form) {
+        form.addEventListener('submit', function () {
+            const overlay = document.getElementById('pipeline-overlay');
+            if (!overlay) return;
+            overlay.classList.remove('d-none');
+
+            const steps = [
+                { id: 'safety', label: 'Screening content safety...', delay: 800 },
+                { id: 'retrieval', label: 'Retrieving relevant documents from Azure AI Search...', delay: 3000 },
+                { id: 'generation', label: 'Generating grounded answer with Azure OpenAI...', delay: 6500 },
+                { id: 'verification', label: 'Running three-ring hallucination defense...', delay: 10000 },
+            ];
+
+            const progressLine = document.getElementById('pipeline-progress-line');
+            const statusText = document.getElementById('pipeline-status-text');
+
+            steps.forEach(function (step, i) {
+                setTimeout(function () {
+                    // Activate this step
+                    const circle = document.getElementById('step-' + step.id + '-circle');
+                    const icon = document.getElementById('step-' + step.id + '-icon');
+
+                    circle.classList.remove('border-secondary', 'bg-body');
+                    circle.classList.add('border-primary', 'bg-primary');
+                    icon.className = 'bx bx-loader-alt bx-spin text-white fs-18';
+
+                    statusText.innerHTML = '<i class="bx bx-loader-alt bx-spin me-1"></i> ' + step.label;
+                    progressLine.style.width = ((i + 1) * 25) + '%';
+
+                    // Mark previous step as completed
+                    if (i > 0) {
+                        var prev = steps[i - 1];
+                        var prevCircle = document.getElementById('step-' + prev.id + '-circle');
+                        var prevIcon = document.getElementById('step-' + prev.id + '-icon');
+                        prevCircle.classList.remove('border-primary', 'bg-primary');
+                        prevCircle.classList.add('border-success', 'bg-success');
+                        prevIcon.className = 'bx bx-check text-white fs-18';
+                    }
+                }, step.delay);
+            });
+        });
     }
 });
 </script>
