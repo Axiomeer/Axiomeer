@@ -74,6 +74,70 @@ class ContentSafetyService
     }
 
     /**
+     * Prompt Shields — detect jailbreak attempts and indirect injection attacks.
+     * Uses Azure Content Safety Prompt Shields API.
+     */
+    public function shieldPrompt(string $userPrompt, array $documents = []): array
+    {
+        if (!$this->isConfigured()) {
+            return [
+                'success' => true,
+                'jailbreak_detected' => false,
+                'injection_detected' => false,
+                'safe' => true,
+                'mock' => true,
+            ];
+        }
+
+        $url = "{$this->endpoint}/contentsafety/text:shieldPrompt?api-version={$this->apiVersion}";
+
+        $startTime = microtime(true);
+
+        $body = [
+            'userPrompt' => $userPrompt,
+            'documents' => array_map(fn ($doc) => is_string($doc) ? $doc : ($doc['content'] ?? ''), $documents),
+        ];
+
+        $response = Http::withHeaders([
+            'Ocp-Apim-Subscription-Key' => $this->apiKey,
+            'Content-Type' => 'application/json',
+        ])->timeout(15)->post($url, $body);
+
+        $latencyMs = (int) ((microtime(true) - $startTime) * 1000);
+
+        if ($response->failed()) {
+            Log::warning('Prompt Shields check failed — proceeding with caution', [
+                'status' => $response->status(),
+                'body' => $response->body(),
+            ]);
+
+            return [
+                'success' => false,
+                'error' => $response->json('error.message', 'Prompt shield check failed'),
+                'latency_ms' => $latencyMs,
+                'safe' => true, // Don't block on API failure
+            ];
+        }
+
+        $data = $response->json();
+        $userAttack = $data['userPromptAnalysis']['attackDetected'] ?? false;
+        $docAttacks = collect($data['documentsAnalysis'] ?? [])
+            ->pluck('attackDetected')
+            ->filter()
+            ->isNotEmpty();
+
+        return [
+            'success' => true,
+            'jailbreak_detected' => $userAttack,
+            'injection_detected' => $docAttacks,
+            'safe' => !$userAttack && !$docAttacks,
+            'user_analysis' => $data['userPromptAnalysis'] ?? [],
+            'document_analysis' => $data['documentsAnalysis'] ?? [],
+            'latency_ms' => $latencyMs,
+        ];
+    }
+
+    /**
      * Check groundedness of a generated answer against source documents.
      * Uses Azure Content Safety Groundedness Detection API.
      */

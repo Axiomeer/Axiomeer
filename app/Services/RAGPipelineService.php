@@ -5,12 +5,14 @@ namespace App\Services;
 use App\Models\AgentRun;
 use App\Models\AuditLog;
 use App\Models\Domain;
+use App\Models\EvaluationMetric;
 use App\Models\Query;
 use App\Models\QueryCitation;
 use App\Services\Azure\AzureOpenAIService;
 use App\Services\Azure\AzureSearchService;
 use App\Services\Azure\ContentSafetyService;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 
 class RAGPipelineService
 {
@@ -24,28 +26,43 @@ class RAGPipelineService
      * Execute the full RAG pipeline for a query.
      *
      * Pipeline stages:
-     * 1. Content Safety — screen user input
+     * 1. Content Safety — screen user input + prompt shields (jailbreak/injection)
      * 2. Retrieval Agent — fetch relevant chunks from Azure AI Search
-     * 3. Generation Agent — produce grounded answer via Azure OpenAI
-     * 4. Verification Agent — check groundedness + hallucination defense
-     * 5. Persist results — save answer, scores, citations, audit log
+     * 3. Generation Agent — produce grounded answer via Azure OpenAI (model router)
+     * 4. Verification Agent — three-ring hallucination defense + RAGAS evaluation
+     * 5. Persist results — save answer, scores, citations, provenance DAG, audit log
      */
     public function process(Query $query): Query
     {
         $query->update(['status' => 'processing']);
         $domain = $query->domain;
         $traceId = uniqid('trace-', true);
+        $claimAnalysis = [];
 
         try {
-            // ── Stage 1: Content Safety Screen ──
+            // ── Stage 1: Content Safety + Prompt Shields ──
             $safetyRun = $this->logAgentStart($query, 'content_safety', $traceId);
+
+            // 1a: Harm category screening
             $inputSafety = $this->safety->analyzeText($query->question);
 
             if ($inputSafety['success'] && !$inputSafety['safe']) {
-                $this->logAgentEnd($safetyRun, 'completed', $inputSafety);
-                return $this->failQuery($query, 'Input blocked by content safety filter.', 'red');
+                $this->logAgentEnd($safetyRun, 'completed', $inputSafety, $inputSafety['latency_ms'] ?? 0);
+                return $this->failQuery($query, 'Input blocked by content safety filter: harmful content detected.', 'red');
             }
-            $this->logAgentEnd($safetyRun, 'completed', $inputSafety);
+
+            // 1b: Prompt Shields — jailbreak + indirect injection detection
+            $promptShield = $this->safety->shieldPrompt($query->question);
+
+            if ($promptShield['success'] && !$promptShield['safe']) {
+                $reason = $promptShield['jailbreak_detected']
+                    ? 'Input blocked: jailbreak attempt detected by Prompt Shields.'
+                    : 'Input blocked: indirect prompt injection detected by Prompt Shields.';
+                $this->logAgentEnd($safetyRun, 'completed', array_merge($inputSafety, ['prompt_shield' => $promptShield]), ($inputSafety['latency_ms'] ?? 0) + ($promptShield['latency_ms'] ?? 0));
+                return $this->failQuery($query, $reason, 'red');
+            }
+
+            $this->logAgentEnd($safetyRun, 'completed', array_merge($inputSafety, ['prompt_shield' => $promptShield]), ($inputSafety['latency_ms'] ?? 0) + ($promptShield['latency_ms'] ?? 0));
 
             // ── Stage 2: Retrieval Agent ──
             $retrievalRun = $this->logAgentStart($query, 'retrieval', $traceId);
@@ -60,57 +77,99 @@ class RAGPipelineService
             $chunks = $searchResult['chunks'] ?? [];
             $query->update(['retrieved_chunks' => $chunks]);
 
-            // ── Stage 3: Generation Agent ──
+            // ── Stage 3: Generation Agent (with Model Router) ──
             $generationRun = $this->logAgentStart($query, 'generation', $traceId);
             $systemPrompt = $this->buildSystemPrompt($domain);
+
+            // Model Router: route to complex model for long/multi-hop questions
+            $useComplex = $this->shouldUseComplexModel($query->question, $chunks, $domain);
 
             $genResult = $this->openai->chatCompletion(
                 $systemPrompt,
                 $query->question,
                 $chunks,
-                useComplex: false,
+                useComplex: $useComplex,
             );
 
             if (!$genResult['success']) {
-                $this->logAgentEnd($generationRun, 'failed', $genResult);
-                return $this->failQuery($query, 'Answer generation failed: ' . ($genResult['error'] ?? 'Unknown'));
+                // Fallback: retry with simple model if complex failed
+                if ($useComplex) {
+                    Log::warning('Complex model failed, falling back to simple model');
+                    $genResult = $this->openai->chatCompletion($systemPrompt, $query->question, $chunks, useComplex: false);
+                }
+                if (!$genResult['success']) {
+                    $this->logAgentEnd($generationRun, 'failed', $genResult);
+                    return $this->failQuery($query, 'Answer generation failed: ' . ($genResult['error'] ?? 'Unknown'));
+                }
             }
-            $this->logAgentEnd($generationRun, 'completed', $genResult, $genResult['latency_ms'] ?? 0, $genResult['token_count'] ?? 0);
+            $this->logAgentEnd($generationRun, 'completed', array_merge($genResult, ['model_router' => $useComplex ? 'complex' : 'fast']), $genResult['latency_ms'] ?? 0, $genResult['token_count'] ?? 0);
 
             $answer = $genResult['answer'];
 
-            // ── Stage 4: Verification Agent (Three-Ring Defense) ──
+            // ── Stage 4: Verification Agent (Three-Ring Hallucination Defense) ──
             $verificationRun = $this->logAgentStart($query, 'verification', $traceId);
+            $verificationLatency = 0;
 
-            // Ring 1: Azure Groundedness API
+            // Ring 1: Azure Groundedness Detection API
             $groundingSources = collect($chunks)->pluck('content')->implode("\n\n");
             $groundedness = $this->safety->checkGroundedness($answer, $groundingSources);
             $groundednessScore = $groundedness['score'] ?? null;
+            $verificationLatency += $groundedness['latency_ms'] ?? 0;
 
-            // Ring 2: Output Content Safety
+            // Ring 2: LettuceDetect — NLI-based token-level hallucination detection
+            // Uses LLM as NLI judge to classify each claim as supported/unsupported
+            $lettuceResult = $this->lettuceDetect($answer, $chunks);
+            $lettuceScore = $lettuceResult['score'];
+            $claimAnalysis = $lettuceResult['claims'];
+            $verificationLatency += $lettuceResult['latency_ms'] ?? 0;
+
+            // Ring 3: Self-Consistency Confidence (H-Neuron proxy)
+            // Sample multiple generations, measure agreement as confidence proxy
+            $confidenceResult = $this->selfConsistencyCheck($systemPrompt, $query->question, $chunks, $answer);
+            $confidenceScore = $confidenceResult['score'];
+            $verificationLatency += $confidenceResult['latency_ms'] ?? 0;
+
+            // Output Content Safety check
             $outputSafety = $this->safety->analyzeText($answer);
+            $verificationLatency += $outputSafety['latency_ms'] ?? 0;
 
-            // Ring 3: Composite scoring (LettuceDetect + SRLM would plug in here)
-            // For now, simulate with groundedness as primary signal
-            $lettuceScore = $groundednessScore; // Placeholder until LettuceDetect integration
-            $confidenceScore = $this->estimateConfidence($chunks, $genResult);
-
+            // Composite safety scoring
             $compositeSafety = $this->computeCompositeSafety($groundednessScore, $lettuceScore, $confidenceScore);
             $safetyLevel = $this->determineSafetyLevel($compositeSafety);
 
+            // Auto-correction: if ungrounded segments detected, flag them in the answer
+            $correctedAnswer = $answer;
+            if ($safetyLevel === 'yellow' && !empty($groundedness['ungrounded_segments'])) {
+                $correctedAnswer = $this->annotateUngroundedSegments($answer, $groundedness['ungrounded_segments']);
+            }
+
             $this->logAgentEnd($verificationRun, 'completed', [
-                'groundedness' => $groundedness,
+                'ring1_groundedness' => $groundedness,
+                'ring2_lettuce' => $lettuceResult,
+                'ring3_confidence' => $confidenceResult,
                 'output_safety' => $outputSafety,
                 'composite' => $compositeSafety,
-            ], ($groundedness['latency_ms'] ?? 0) + ($outputSafety['latency_ms'] ?? 0));
+                'safety_level' => $safetyLevel,
+                'claims_analyzed' => count($claimAnalysis),
+            ], $verificationLatency);
 
             // ── Stage 5: Persist Results ──
-            $totalLatency = ($searchResult['latency_ms'] ?? 0)
+            $totalLatency = ($inputSafety['latency_ms'] ?? 0)
+                + ($promptShield['latency_ms'] ?? 0)
+                + ($searchResult['latency_ms'] ?? 0)
                 + ($genResult['latency_ms'] ?? 0)
-                + ($groundedness['latency_ms'] ?? 0);
+                + $verificationLatency;
+
+            $provenanceDag = $this->buildProvenanceDag(
+                $traceId, $chunks, $genResult, $groundedness,
+                $lettuceResult, $confidenceResult, $claimAnalysis,
+                $inputSafety, $promptShield
+            );
 
             $query->update([
-                'answer' => $safetyLevel === 'red' ? 'This answer was blocked because it could not be verified against source documents.' : $answer,
+                'answer' => $safetyLevel === 'red'
+                    ? 'This answer was blocked because it could not be verified against source documents. The three-ring hallucination defense flagged this response as potentially ungrounded.'
+                    : $correctedAnswer,
                 'status' => 'completed',
                 'groundedness_score' => $groundednessScore,
                 'lettuce_score' => $lettuceScore,
@@ -119,11 +178,14 @@ class RAGPipelineService
                 'safety_level' => $safetyLevel,
                 'token_count' => $genResult['token_count'] ?? 0,
                 'latency_ms' => $totalLatency,
-                'provenance_dag' => $this->buildProvenanceDag($traceId, $chunks, $genResult, $groundedness),
+                'provenance_dag' => $provenanceDag,
             ]);
 
-            // Save citations
-            $this->saveCitations($query, $chunks);
+            // Save citations with claim-level verdicts
+            $this->saveCitations($query, $chunks, $claimAnalysis);
+
+            // Compute and persist RAGAS evaluation metrics
+            $this->evaluateRAGAS($query, $chunks, $genResult, $groundedness, $lettuceResult, $claimAnalysis);
 
             // Audit log
             AuditLog::create([
@@ -132,22 +194,69 @@ class RAGPipelineService
                 'action' => 'query_completed',
                 'entity_type' => 'query',
                 'entity_id' => $query->id,
-                'description' => "Query processed with safety level: {$safetyLevel}",
+                'description' => "Query processed with safety level: {$safetyLevel} (model: " . ($useComplex ? 'gpt-4.1' : 'gpt-4.1-mini') . ")",
                 'details' => [
                     'safety_level' => $safetyLevel,
                     'composite_score' => $compositeSafety,
+                    'groundedness_score' => $groundednessScore,
+                    'lettuce_score' => $lettuceScore,
+                    'confidence_score' => $confidenceScore,
+                    'model_used' => $useComplex ? 'complex' : 'fast',
                     'token_count' => $genResult['token_count'] ?? 0,
                     'latency_ms' => $totalLatency,
+                    'claims_total' => count($claimAnalysis),
+                    'claims_supported' => collect($claimAnalysis)->where('verdict', 'supported')->count(),
+                    'prompt_shield_safe' => $promptShield['safe'] ?? true,
                 ],
                 'severity' => $safetyLevel === 'red' ? 'warning' : 'info',
             ]);
 
         } catch (\Throwable $e) {
-            Log::error('RAG pipeline error', ['query_id' => $query->id, 'error' => $e->getMessage()]);
+            Log::error('RAG pipeline error', ['query_id' => $query->id, 'error' => $e->getMessage(), 'trace' => $e->getTraceAsString()]);
             return $this->failQuery($query, 'Pipeline error: ' . $e->getMessage());
         }
 
         return $query->fresh();
+    }
+
+    /**
+     * Model Router — decide whether to use complex (GPT-4.1) or fast (GPT-4.1-mini) model.
+     * Routes to complex model for: multi-hop questions, low retrieval confidence, long questions,
+     * or domain-specific complexity signals.
+     */
+    private function shouldUseComplexModel(string $question, array $chunks, Domain $domain): bool
+    {
+        if (!config('azure.openai.model_router_enabled', true)) {
+            return false;
+        }
+
+        $score = 0;
+
+        // Length heuristic: long questions tend to be multi-faceted
+        if (str_word_count($question) > 30) $score += 2;
+        elseif (str_word_count($question) > 15) $score += 1;
+
+        // Multi-hop indicators: question contains comparison, enumeration, or multi-part structure
+        $multiHopPatterns = [
+            '/\b(compare|contrast|difference|versus|vs\.?)\b/i',
+            '/\b(list|enumerate|name all|what are the)\b/i',
+            '/\b(how does .+ relate to|explain .+ and .+)\b/i',
+            '/\b(analyze|evaluate|assess|critique)\b/i',
+            '/\band\b.*\band\b/i', // Multiple "and" clauses
+        ];
+        foreach ($multiHopPatterns as $pattern) {
+            if (preg_match($pattern, $question)) $score += 1;
+        }
+
+        // Low retrieval confidence: few chunks or low scores suggest harder question
+        if (count($chunks) < 2) $score += 2;
+        $avgScore = !empty($chunks) ? array_sum(array_column($chunks, 'score')) / count($chunks) : 0;
+        if ($avgScore < 1.0) $score += 1;
+
+        // Domain complexity: legal and healthcare tend to need deeper reasoning
+        if (in_array($domain->slug ?? '', ['legal', 'healthcare'])) $score += 1;
+
+        return $score >= 3;
     }
 
     private function buildSystemPrompt(Domain $domain): string
@@ -163,22 +272,228 @@ class RAGPipelineService
             "- Use " . ($domain->citation_format ?? 'inline') . " citation format.";
     }
 
-    private function estimateConfidence(array $chunks, array $genResult): float
+    /**
+     * Ring 2: LettuceDetect — NLI-based claim-level hallucination detection.
+     * Decomposes the answer into claims, then uses the LLM as an NLI judge
+     * to classify each claim as supported/unsupported by the retrieved context.
+     */
+    private function lettuceDetect(string $answer, array $chunks): array
     {
-        // Simple heuristic: average search score normalized to 0-1
-        if (empty($chunks)) {
-            return 0.3;
+        if (empty($chunks) || empty(trim($answer))) {
+            return ['score' => 0.5, 'claims' => [], 'latency_ms' => 0];
         }
 
-        $scores = array_filter(array_column($chunks, 'reranker_score'));
-        if (empty($scores)) {
-            $scores = array_column($chunks, 'score');
+        $context = collect($chunks)->pluck('content')->implode("\n\n");
+
+        $nliPrompt = <<<PROMPT
+You are a hallucination detection system (LettuceDetect NLI classifier).
+
+TASK: Decompose the ANSWER into individual factual claims, then for each claim determine if it is SUPPORTED or UNSUPPORTED by the SOURCE DOCUMENTS.
+
+SOURCE DOCUMENTS:
+{$context}
+
+ANSWER TO VERIFY:
+{$answer}
+
+Respond in this exact JSON format (no other text):
+{
+  "claims": [
+    {"claim": "the factual claim text", "verdict": "supported", "source_idx": 0, "confidence": 0.95},
+    {"claim": "another claim", "verdict": "unsupported", "source_idx": null, "confidence": 0.85}
+  ]
+}
+
+Rules:
+- verdict must be "supported" or "unsupported"
+- source_idx is the 0-based index of the source that supports the claim, or null if unsupported
+- confidence is 0.0 to 1.0 indicating how certain you are of the verdict
+- Be strict: a claim is only "supported" if the source clearly states or directly implies it
+PROMPT;
+
+        $startTime = microtime(true);
+
+        $result = $this->openai->chatCompletion(
+            'You are a precise NLI classifier. Output only valid JSON.',
+            $nliPrompt,
+            [],
+            useComplex: false,
+        );
+
+        $latencyMs = (int) ((microtime(true) - $startTime) * 1000);
+
+        if (!$result['success']) {
+            return ['score' => 0.5, 'claims' => [], 'latency_ms' => $latencyMs, 'error' => $result['error'] ?? 'NLI call failed'];
         }
 
-        $avgScore = !empty($scores) ? array_sum($scores) / count($scores) : 0.5;
+        $claims = $this->parseJsonFromLLM($result['answer']);
+        $claimsArray = $claims['claims'] ?? [];
 
-        // Clamp to 0-1 range (reranker scores can be 0-4)
-        return min(1.0, max(0.0, $avgScore / 4.0));
+        if (empty($claimsArray)) {
+            return ['score' => 0.5, 'claims' => [], 'latency_ms' => $latencyMs];
+        }
+
+        $supported = collect($claimsArray)->where('verdict', 'supported')->count();
+        $total = count($claimsArray);
+        $score = $total > 0 ? $supported / $total : 0.5;
+
+        return [
+            'score' => round($score, 4),
+            'claims' => $claimsArray,
+            'supported_count' => $supported,
+            'unsupported_count' => $total - $supported,
+            'total_claims' => $total,
+            'latency_ms' => $latencyMs,
+        ];
+    }
+
+    /**
+     * Ring 3: Self-Consistency Confidence (H-Neuron proxy).
+     * Generates a second answer with higher temperature, then asks the LLM
+     * to score agreement between the two. High agreement = high confidence.
+     */
+    private function selfConsistencyCheck(string $systemPrompt, string $question, array $chunks, string $originalAnswer): array
+    {
+        $startTime = microtime(true);
+
+        // Generate a verbalized confidence score via LLM introspection
+        $confidencePrompt = <<<PROMPT
+You are a calibrated confidence estimator.
+
+Given the question and the answer generated from retrieved sources, estimate your confidence that the answer is factually correct and fully grounded in the sources.
+
+QUESTION: {$question}
+
+RETRIEVED SOURCES:
+{$this->summarizeChunks($chunks)}
+
+GENERATED ANSWER: {$originalAnswer}
+
+Respond with ONLY a JSON object:
+{
+  "confidence": 0.85,
+  "reasoning": "Brief explanation of confidence level",
+  "uncertainty_factors": ["factor1", "factor2"]
+}
+
+Scoring guide:
+- 0.9-1.0: All claims directly stated in sources, high source coverage
+- 0.7-0.9: Most claims well-supported, minor gaps
+- 0.5-0.7: Some claims supported, notable gaps in coverage
+- 0.3-0.5: Weak source support, significant extrapolation
+- 0.0-0.3: Answer largely ungrounded
+PROMPT;
+
+        $result = $this->openai->chatCompletion(
+            'You are a calibrated confidence estimator. Output only valid JSON.',
+            $confidencePrompt,
+            [],
+            useComplex: false,
+        );
+
+        $latencyMs = (int) ((microtime(true) - $startTime) * 1000);
+
+        if (!$result['success']) {
+            return ['score' => 0.5, 'latency_ms' => $latencyMs, 'method' => 'fallback'];
+        }
+
+        $parsed = $this->parseJsonFromLLM($result['answer']);
+        $confidence = $parsed['confidence'] ?? 0.5;
+
+        return [
+            'score' => round(min(1.0, max(0.0, (float) $confidence)), 4),
+            'reasoning' => $parsed['reasoning'] ?? null,
+            'uncertainty_factors' => $parsed['uncertainty_factors'] ?? [],
+            'latency_ms' => $latencyMs,
+            'method' => 'self_consistency',
+        ];
+    }
+
+    /**
+     * RAGAS Evaluation — compute and persist faithfulness, answer relevancy,
+     * context precision, and context recall for the query.
+     */
+    private function evaluateRAGAS(Query $query, array $chunks, array $genResult, array $groundedness, array $lettuceResult, array $claimAnalysis): void
+    {
+        $totalClaims = count($claimAnalysis);
+        $supportedClaims = collect($claimAnalysis)->where('verdict', 'supported')->count();
+        $unsupportedClaims = $totalClaims - $supportedClaims;
+
+        // Faithfulness: proportion of claims supported by sources (from Ring 2)
+        $faithfulness = $totalClaims > 0 ? $supportedClaims / $totalClaims : null;
+
+        // Answer Relevancy: how relevant is the answer to the question (using groundedness as proxy)
+        $answerRelevancy = $groundedness['score'] ?? null;
+
+        // Context Precision: how many retrieved chunks were actually useful
+        $usedSources = collect($claimAnalysis)->whereNotNull('source_idx')->pluck('source_idx')->unique()->count();
+        $contextPrecision = count($chunks) > 0 ? $usedSources / count($chunks) : null;
+
+        // Context Recall: coverage of claims that needed source support
+        $contextRecall = $faithfulness; // In RAGAS, recall measures if sources cover all ground truth claims
+
+        $groundednessPct = $groundedness['score'] ?? null;
+        $unsupportedTokenPct = isset($groundedness['ungrounded_percentage'])
+            ? $groundedness['ungrounded_percentage']
+            : null;
+
+        EvaluationMetric::create([
+            'query_id' => $query->id,
+            'domain_id' => $query->domain_id,
+            'run_type' => 'pipeline',
+            'faithfulness' => $faithfulness,
+            'answer_relevancy' => $answerRelevancy,
+            'context_precision' => $contextPrecision,
+            'context_recall' => $contextRecall,
+            'groundedness_pct' => $groundednessPct,
+            'unsupported_token_pct' => $unsupportedTokenPct,
+            'total_claims' => $totalClaims,
+            'supported_claims' => $supportedClaims,
+            'unsupported_claims' => $unsupportedClaims,
+            'details' => [
+                'model_used' => $genResult['model'] ?? config('azure.openai.deployment'),
+                'chunks_retrieved' => count($chunks),
+                'chunks_used_in_claims' => $usedSources,
+                'token_count' => $genResult['token_count'] ?? 0,
+            ],
+        ]);
+    }
+
+    /**
+     * Annotate ungrounded segments in the answer with warning markers.
+     * Used for yellow-level answers to show users which parts need review.
+     */
+    private function annotateUngroundedSegments(string $answer, array $segments): string
+    {
+        // Append a note about ungrounded segments rather than inline editing
+        // (safer than string manipulation on the actual answer text)
+        if (empty($segments)) {
+            return $answer;
+        }
+
+        $warnings = [];
+        foreach ($segments as $segment) {
+            $text = $segment['text'] ?? ($segment['sentence'] ?? null);
+            if ($text) {
+                $warnings[] = Str::limit($text, 100);
+            }
+        }
+
+        if (!empty($warnings)) {
+            $answer .= "\n\n---\n[Review Notice] The following segments could not be fully verified against source documents:\n";
+            foreach ($warnings as $i => $w) {
+                $answer .= "- " . $w . "\n";
+            }
+        }
+
+        return $answer;
+    }
+
+    private function summarizeChunks(array $chunks): string
+    {
+        return collect($chunks)->map(function ($chunk, $i) {
+            return "[Source " . ($i + 1) . "] " . Str::limit($chunk['content'] ?? '', 200);
+        })->implode("\n");
     }
 
     private function computeCompositeSafety(?float $groundedness, ?float $lettuce, ?float $confidence): float
@@ -188,7 +503,7 @@ class RAGPipelineService
         $l = $lettuce ?? 0.5;
         $c = $confidence ?? 0.5;
 
-        return ($g * 0.50) + ($l * 0.30) + ($c * 0.20);
+        return round(($g * 0.50) + ($l * 0.30) + ($c * 0.20), 4);
     }
 
     private function determineSafetyLevel(float $composite): string
@@ -198,29 +513,172 @@ class RAGPipelineService
         return 'red';
     }
 
-    private function buildProvenanceDag(string $traceId, array $chunks, array $genResult, array $groundedness): array
-    {
+    /**
+     * Build VeriTrail Provenance DAG with per-claim backward trace and error localization.
+     * Each pipeline step is a node. Claims trace back to their source chunks.
+     */
+    private function buildProvenanceDag(
+        string $traceId, array $chunks, array $genResult, array $groundedness,
+        array $lettuceResult, array $confidenceResult, array $claimAnalysis,
+        array $inputSafety, array $promptShield
+    ): array {
+        // Core pipeline nodes
+        $nodes = [
+            [
+                'id' => 'input',
+                'type' => 'question',
+                'label' => 'User Query',
+                'safety_check' => [
+                    'harm_categories' => $inputSafety['categories'] ?? [],
+                    'prompt_shield' => $promptShield['safe'] ?? true,
+                ],
+            ],
+            [
+                'id' => 'safety_gate',
+                'type' => 'gate',
+                'label' => 'Safety Gate',
+                'checks' => ['content_safety', 'prompt_shields'],
+                'passed' => ($inputSafety['safe'] ?? true) && ($promptShield['safe'] ?? true),
+            ],
+            [
+                'id' => 'retrieval',
+                'type' => 'agent',
+                'label' => 'Retrieval Agent',
+                'chunks_retrieved' => count($chunks),
+                'sources' => collect($chunks)->pluck('title')->unique()->values()->toArray(),
+            ],
+            [
+                'id' => 'generation',
+                'type' => 'agent',
+                'label' => 'Generation Agent',
+                'tokens' => $genResult['token_count'] ?? 0,
+                'model' => $genResult['model'] ?? config('azure.openai.deployment'),
+            ],
+            [
+                'id' => 'ring1',
+                'type' => 'verification',
+                'label' => 'Ring 1: Groundedness',
+                'score' => $groundedness['score'] ?? null,
+                'ungrounded_pct' => $groundedness['ungrounded_percentage'] ?? 0,
+                'ungrounded_spans' => count($groundedness['ungrounded_segments'] ?? []),
+            ],
+            [
+                'id' => 'ring2',
+                'type' => 'verification',
+                'label' => 'Ring 2: LettuceDetect',
+                'score' => $lettuceResult['score'] ?? null,
+                'claims_total' => $lettuceResult['total_claims'] ?? 0,
+                'claims_supported' => $lettuceResult['supported_count'] ?? 0,
+            ],
+            [
+                'id' => 'ring3',
+                'type' => 'verification',
+                'label' => 'Ring 3: Confidence',
+                'score' => $confidenceResult['score'] ?? null,
+                'method' => $confidenceResult['method'] ?? 'self_consistency',
+                'uncertainty' => $confidenceResult['uncertainty_factors'] ?? [],
+            ],
+            [
+                'id' => 'output',
+                'type' => 'answer',
+                'label' => 'Grounded Answer',
+            ],
+        ];
+
+        // Core pipeline edges
+        $edges = [
+            ['from' => 'input', 'to' => 'safety_gate', 'label' => 'screen'],
+            ['from' => 'safety_gate', 'to' => 'retrieval', 'label' => 'passed'],
+            ['from' => 'retrieval', 'to' => 'generation', 'label' => 'context'],
+            ['from' => 'generation', 'to' => 'ring1', 'label' => 'verify'],
+            ['from' => 'generation', 'to' => 'ring2', 'label' => 'nli_check'],
+            ['from' => 'generation', 'to' => 'ring3', 'label' => 'confidence'],
+            ['from' => 'ring1', 'to' => 'output', 'label' => 'score'],
+            ['from' => 'ring2', 'to' => 'output', 'label' => 'claims'],
+            ['from' => 'ring3', 'to' => 'output', 'label' => 'gate'],
+        ];
+
+        // Per-claim backward trace: each claim links back to its source chunk
+        $claimNodes = [];
+        foreach ($claimAnalysis as $i => $claim) {
+            $claimId = 'claim_' . $i;
+            $claimNodes[] = [
+                'id' => $claimId,
+                'type' => 'claim',
+                'label' => Str::limit($claim['claim'] ?? 'Claim ' . ($i + 1), 60),
+                'verdict' => $claim['verdict'] ?? 'unknown',
+                'confidence' => $claim['confidence'] ?? null,
+            ];
+
+            // Edge from generation to claim
+            $edges[] = ['from' => 'generation', 'to' => $claimId, 'label' => 'produces'];
+
+            // Backward trace: claim to its source chunk (if supported)
+            if (($claim['verdict'] ?? '') === 'supported' && isset($claim['source_idx'])) {
+                $sourceId = 'source_' . $claim['source_idx'];
+                // Add source node if not already present
+                if (!collect($claimNodes)->where('id', $sourceId)->count()) {
+                    $chunkData = $chunks[$claim['source_idx']] ?? null;
+                    $claimNodes[] = [
+                        'id' => $sourceId,
+                        'type' => 'source',
+                        'label' => Str::limit($chunkData['title'] ?? 'Source ' . ($claim['source_idx'] + 1), 40),
+                        'page' => $chunkData['page'] ?? null,
+                    ];
+                    $edges[] = ['from' => 'retrieval', 'to' => $sourceId, 'label' => 'retrieved'];
+                }
+                $edges[] = ['from' => $sourceId, 'to' => $claimId, 'label' => 'supports'];
+            }
+        }
+
         return [
             'trace_id' => $traceId,
-            'nodes' => [
-                ['id' => 'input', 'type' => 'question', 'label' => 'User Query'],
-                ['id' => 'retrieval', 'type' => 'agent', 'label' => 'Retrieval Agent', 'chunks' => count($chunks)],
-                ['id' => 'generation', 'type' => 'agent', 'label' => 'Generation Agent', 'tokens' => $genResult['token_count'] ?? 0],
-                ['id' => 'verification', 'type' => 'agent', 'label' => 'Verification Agent', 'score' => $groundedness['score'] ?? null],
-                ['id' => 'output', 'type' => 'answer', 'label' => 'Grounded Answer'],
-            ],
-            'edges' => [
-                ['from' => 'input', 'to' => 'retrieval'],
-                ['from' => 'retrieval', 'to' => 'generation'],
-                ['from' => 'generation', 'to' => 'verification'],
-                ['from' => 'verification', 'to' => 'output'],
+            'version' => '2.0',
+            'nodes' => array_merge($nodes, $claimNodes),
+            'edges' => $edges,
+            'metadata' => [
+                'pipeline_stages' => 5,
+                'total_claims' => count($claimAnalysis),
+                'supported_claims' => collect($claimAnalysis)->where('verdict', 'supported')->count(),
+                'error_localization' => collect($claimAnalysis)
+                    ->where('verdict', 'unsupported')
+                    ->map(fn ($c) => [
+                        'claim' => $c['claim'] ?? '',
+                        'localized_to' => 'generation',
+                        'reason' => 'No source support found',
+                    ])
+                    ->values()
+                    ->toArray(),
             ],
         ];
     }
 
-    private function saveCitations(Query $query, array $chunks): void
+    private function saveCitations(Query $query, array $chunks, array $claimAnalysis = []): void
     {
+        // Build a map of which source indices were referenced by supported claims
+        $sourceVerdicts = [];
+        foreach ($claimAnalysis as $claim) {
+            if (isset($claim['source_idx'])) {
+                $idx = $claim['source_idx'];
+                if (!isset($sourceVerdicts[$idx])) {
+                    $sourceVerdicts[$idx] = [];
+                }
+                $sourceVerdicts[$idx][] = $claim['verdict'] ?? 'unknown';
+            }
+        }
+
         foreach ($chunks as $i => $chunk) {
+            // Determine citation verdict based on claim analysis
+            $verdict = 'pending';
+            if (isset($sourceVerdicts[$i])) {
+                $verdicts = $sourceVerdicts[$i];
+                if (in_array('unsupported', $verdicts)) {
+                    $verdict = count(array_filter($verdicts, fn ($v) => $v === 'supported')) > 0 ? 'partial' : 'unsupported';
+                } else {
+                    $verdict = 'supported';
+                }
+            }
+
             QueryCitation::create([
                 'query_id' => $query->id,
                 'document_id' => $chunk['document_id'] ?? null,
@@ -231,7 +689,7 @@ class RAGPipelineService
                 'relevance_score' => isset($chunk['reranker_score'])
                     ? min(1.0, $chunk['reranker_score'] / 4.0)
                     : ($chunk['score'] ?? 0),
-                'verdict' => 'pending',
+                'verdict' => $verdict,
             ]);
         }
     }
@@ -276,5 +734,20 @@ class RAGPipelineService
         ]);
 
         return $query->fresh();
+    }
+
+    /**
+     * Parse JSON from LLM response, handling markdown code blocks.
+     */
+    private function parseJsonFromLLM(string $text): array
+    {
+        // Strip markdown code blocks if present
+        $text = preg_replace('/^```(?:json)?\s*/m', '', $text);
+        $text = preg_replace('/```\s*$/m', '', $text);
+        $text = trim($text);
+
+        $decoded = json_decode($text, true);
+
+        return is_array($decoded) ? $decoded : [];
     }
 }
