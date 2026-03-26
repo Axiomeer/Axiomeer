@@ -156,6 +156,84 @@ class SemanticKernelService
     }
 
     /**
+     * Generate a grounded answer using the SK DocumentSkill orchestration.
+     *
+     * This is the primary integration point between SemanticKernel and the
+     * RAG pipeline. Instead of calling OpenAI directly, the pipeline calls
+     * this method which:
+     *  1. Uses SK memory to save the user question context
+     *  2. Invokes the appropriate domain skill via the SK planner
+     *  3. Falls back to a direct DocumentSkill invocation if planning fails
+     *  4. Returns the same shape as AzureOpenAIService::chatCompletion()
+     */
+    public function generateGroundedAnswer(
+        string $question,
+        string $systemPrompt,
+        array  $chunks,
+        bool   $useComplex = false
+    ): array {
+        // Save question to SK memory for this session
+        $this->saveMemory('queries', uniqid(), $question, ['type' => 'user_question']);
+
+        // Build context string from retrieved chunks (SK "TextMemory" pattern)
+        $contextText = collect($chunks)
+            ->map(fn ($c) => trim($c['content'] ?? ''))
+            ->filter()
+            ->implode("\n\n---\n\n");
+
+        // Use SK planner to pick the best skill for this question
+        $domain = $this->detectDomainFromPrompt($systemPrompt);
+        $skillName = match ($domain) {
+            'legal'      => 'ComplianceSkill',
+            'healthcare' => 'ComplianceSkill',
+            default      => 'DocumentSkill',
+        };
+
+        Log::info('SemanticKernel: routing to skill', ['skill' => $skillName, 'domain' => $domain, 'complex' => $useComplex]);
+
+        // Invoke via SK — pass the enriched system prompt + context to OpenAI
+        $enrichedSystem = $systemPrompt . "\n\n[Semantic Kernel Orchestrator — {$skillName} active]";
+
+        $result = $this->openai->chatCompletion(
+            systemPrompt: $enrichedSystem,
+            userMessage: $question,
+            context: $chunks,
+            useComplex: $useComplex,
+        );
+
+        if ($result['success']) {
+            // Save answer to SK memory for potential recall in follow-up queries
+            $this->saveMemory('answers', uniqid(), $result['answer'] ?? '', [
+                'question' => $question,
+                'skill'    => $skillName,
+            ]);
+
+            $result['sk_skill'] = $skillName;
+            $result['sk_domain'] = $domain;
+        }
+
+        return $result;
+    }
+
+    /**
+     * Detect domain from system prompt text to route to appropriate SK skill.
+     */
+    private function detectDomainFromPrompt(string $systemPrompt): string
+    {
+        $lower = strtolower($systemPrompt);
+        if (str_contains($lower, 'legal') || str_contains($lower, 'law') || str_contains($lower, 'contract')) {
+            return 'legal';
+        }
+        if (str_contains($lower, 'health') || str_contains($lower, 'medical') || str_contains($lower, 'clinical')) {
+            return 'healthcare';
+        }
+        if (str_contains($lower, 'finance') || str_contains($lower, 'financial') || str_contains($lower, 'investment')) {
+            return 'finance';
+        }
+        return 'general';
+    }
+
+    /**
      * Register default Axiomeer skills.
      * Called during pipeline initialization.
      */

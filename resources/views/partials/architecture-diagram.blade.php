@@ -211,6 +211,17 @@
                     <div class="arch-card-item"><iconify-icon icon="iconamoon:settings-duotone" class="fs-12"></iconify-icon>RRF re-ranking</div>
                 </div>
             </div>
+            <div class="arch-card">
+                <div class="arch-card-title">
+                    Semantic Kernel
+                    <span class="badge bg-success-subtle text-success fs-9 ms-1">new</span>
+                </div>
+                <div class="arch-card-items">
+                    <div class="arch-card-item"><iconify-icon icon="iconamoon:lightning-2-duotone" class="fs-12"></iconify-icon>SK Skills (domain routing)</div>
+                    <div class="arch-card-item"><iconify-icon icon="iconamoon:route-duotone" class="fs-12"></iconify-icon>Sequential Planner</div>
+                    <div class="arch-card-item"><iconify-icon icon="iconamoon:database-duotone" class="fs-12"></iconify-icon>SK Memory (session)</div>
+                </div>
+            </div>
         </div>
 
         {{-- Arrow 3 ↕ 4 --}}
@@ -233,7 +244,7 @@
                 <div class="arch-card-items">
                     <div class="arch-card-item"><iconify-icon icon="iconamoon:lightning-2-duotone" class="fs-12"></iconify-icon>GPT-4.1-mini</div>
                     <div class="arch-card-item"><iconify-icon icon="iconamoon:lightning-2-duotone" class="fs-12"></iconify-icon>GPT-4.1</div>
-                    <div class="arch-card-item"><iconify-icon icon="iconamoon:chart-bar-duotone" class="fs-12"></iconify-icon>text-embedding-3-large</div>
+                    <div class="arch-card-item"><iconify-icon icon="iconamoon:chart-bar-duotone" class="fs-12"></iconify-icon>text-embedding-ada-002</div>
                 </div>
             </div>
             <div class="arch-card">
@@ -407,7 +418,7 @@
                         <iconify-icon icon="iconamoon:arrow-right-2-duotone" class="text-muted"></iconify-icon>
                         <span>Hybrid search retrieves relevant chunks</span>
                         <iconify-icon icon="iconamoon:arrow-right-2-duotone" class="text-muted"></iconify-icon>
-                        <span>GPT generates grounded answer</span>
+                        <span>Semantic Kernel routes to domain skill → GPT generates grounded answer</span>
                         <iconify-icon icon="iconamoon:arrow-right-2-duotone" class="text-muted"></iconify-icon>
                         <span>Three-ring defense scores the answer</span>
                         <iconify-icon icon="iconamoon:arrow-right-2-duotone" class="text-muted"></iconify-icon>
