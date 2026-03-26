@@ -37,6 +37,9 @@ Route::middleware('auth')->group(function () {
     // Responsible AI (all roles)
     Route::get('/responsible-ai', [ResponsibleAiController::class, 'index'])->name('responsible-ai');
 
+    // Architecture diagram (all roles)
+    Route::get('/architecture', fn () => view('architecture'))->name('architecture');
+
     // Analytics (admin + analyst)
     Route::middleware('role:admin,analyst')->group(function () {
         Route::get('/analytics', [AnalyticsController::class, 'index'])->name('analytics');
@@ -60,6 +63,7 @@ Route::middleware('auth')->group(function () {
 Route::middleware('auth')->prefix('api')->group(function () {
     Route::get('/speech-token', \App\Http\Controllers\Api\SpeechTokenController::class)->name('api.speech-token');
     Route::post('/web-search', [\App\Http\Controllers\Api\WebSearchController::class, 'search'])->name('api.web-search');
+    Route::post('/generate-domain-prompt', [SettingsController::class, 'generateDomainPrompt'])->name('api.generate-domain-prompt');
 });
 
 require __DIR__.'/auth.php';

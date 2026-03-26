@@ -24,13 +24,22 @@ class DashboardController extends Controller
             ->take(5)
             ->get();
 
+        // Service status checks
+        $serviceStatus = [
+            'pipeline' => !empty(config('azure.openai.api_key')),
+            'search' => !empty(config('azure.search.endpoint')) && !empty(config('azure.search.api_key')),
+            'safety' => !empty(config('azure.content_safety.endpoint')) && !empty(config('azure.content_safety.api_key')),
+            'groundedness' => !empty(config('azure.foundry.agent_api_key')) && !empty(config('azure.foundry.agent_id')),
+        ];
+
         return view('dashboard.index', compact(
             'totalQueries',
             'documentsIndexed',
             'totalDocuments',
             'avgFaithfulness',
             'hallucinationsBlocked',
-            'recentQueries'
+            'recentQueries',
+            'serviceStatus'
         ));
     }
 }

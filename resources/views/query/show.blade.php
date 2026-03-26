@@ -4,6 +4,7 @@
 @section('page-title', 'Ask Question')
 
 @push('styles')
+<link rel="stylesheet" href="https://unpkg.com/vis-network/standalone/umd/vis-network.min.css">
 <style>
     .chat-container { max-height: calc(100vh - 300px); overflow-y: auto; scroll-behavior: smooth; }
     .chat-bubble { max-width: 92%; animation: fadeInUp 0.3s ease; }
@@ -20,6 +21,22 @@
     .dag-mini .dag-node { width: 32px; height: 32px; }
     .chat-input-area { position: sticky; bottom: 0; background: var(--bs-body-bg); border-top: 1px solid var(--bs-border-color); }
     .explanation-tooltip { max-width: 300px; }
+    /* Safety Cockpit */
+    .safety-cockpit-card { border-radius: 12px; overflow: hidden; border: 1px solid var(--bs-border-color); }
+    .cockpit-banner-green { background: linear-gradient(135deg, rgba(var(--bs-success-rgb), 0.15), rgba(var(--bs-success-rgb), 0.05)); border-left: 4px solid var(--bs-success); }
+    .cockpit-banner-yellow { background: linear-gradient(135deg, rgba(var(--bs-warning-rgb), 0.15), rgba(var(--bs-warning-rgb), 0.05)); border-left: 4px solid var(--bs-warning); }
+    .cockpit-banner-red { background: linear-gradient(135deg, rgba(var(--bs-danger-rgb), 0.15), rgba(var(--bs-danger-rgb), 0.05)); border-left: 4px solid var(--bs-danger); }
+    .score-pill { font-size: 11px; padding: 3px 10px; border-radius: 20px; font-weight: 600; }
+    .cockpit-score-big { font-size: 2rem; font-weight: 800; line-height: 1; }
+    .cockpit-section { padding: 10px 14px; }
+    .cockpit-section + .cockpit-section { border-top: 1px solid var(--bs-border-color); }
+    .cockpit-toggle { cursor: pointer; user-select: none; font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; display: flex; align-items: center; justify-content: space-between; }
+    .cockpit-toggle:hover { opacity: 0.8; }
+    .agent-step { display: flex; align-items: center; gap: 0; flex: 1; }
+    .agent-step-node { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 14px; }
+    .agent-step-line { flex: 1; height: 2px; background: var(--bs-border-color); min-width: 12px; }
+    .agent-step-line.done { background: var(--bs-success); }
+    .vis-tooltip-custom { position: fixed; z-index: 9999; background: var(--bs-body-bg); border: 1px solid var(--bs-border-color); border-radius: 8px; padding: 8px 12px; font-size: 12px; max-width: 240px; pointer-events: none; box-shadow: 0 4px 16px rgba(0,0,0,0.15); }
 </style>
 @endpush
 
@@ -299,14 +316,14 @@
                                         </div>
                                     @endif
 
-                                    {{-- VeriTrail DAG Collapse --}}
+                                    {{-- VeriTrail DAG Collapse (vis.js interactive graph) --}}
                                     @if ($msg->provenance_dag)
                                         @php $dag = $msg->provenance_dag; @endphp
                                         <div class="collapse mb-2" id="veritrial-{{ $msg->id }}">
                                             <div class="border rounded p-3">
                                                 <div class="d-flex justify-content-between align-items-center mb-2">
                                                     <h6 class="fw-semibold fs-12 mb-0">
-                                                        <i class="bx bx-show text-info me-1"></i>
+                                                        <iconify-icon icon="iconamoon:share-2-duotone" class="text-info me-1"></iconify-icon>
                                                         VeriTrail Provenance DAG
                                                     </h6>
                                                     <div class="d-flex align-items-center gap-2">
@@ -316,67 +333,28 @@
                                                         </button>
                                                     </div>
                                                 </div>
-                                                <p class="text-muted fs-10 mb-2">Traces every step of the pipeline. Each node represents a processing stage; edges show data flow.</p>
+                                                <p class="text-muted fs-10 mb-2">Interactive provenance graph. Click nodes to inspect each pipeline step.</p>
 
-                                                {{-- Mini DAG flow --}}
-                                                @php
-                                                    $coreTypes = ['question', 'gate', 'agent', 'verification', 'answer'];
-                                                    $coreNodes = collect($dag['nodes'] ?? [])->whereIn('type', $coreTypes);
-                                                    $nodeIcons = [
-                                                        'input' => 'bx-comment', 'safety_gate' => 'bx-shield',
-                                                        'retrieval' => 'bx-search', 'generation' => 'bx-bolt',
-                                                        'ring1' => 'bx-check-circle', 'ring2' => 'bx-leaf',
-                                                        'ring3' => 'bx-bar-chart', 'output' => 'bx-send',
-                                                    ];
-                                                    $nodeColorMap = ['question' => 'primary', 'gate' => 'warning', 'agent' => 'info', 'verification' => 'danger', 'answer' => 'success'];
-                                                @endphp
-                                                <div class="d-flex align-items-start justify-content-between flex-wrap gap-1 mb-2">
-                                                    @foreach ($coreNodes as $node)
-                                                        @php $nc = $nodeColorMap[$node['type']] ?? 'secondary'; @endphp
-                                                        <div class="text-center" style="flex: 1; min-width: 50px;">
-                                                            <div class="avatar-xs rounded-circle bg-{{ $nc }}-subtle d-flex align-items-center justify-content-center mx-auto mb-1 dag-node">
-                                                                <i class="bx {{ $nodeIcons[$node['id']] ?? 'bx-circle' }} text-{{ $nc }} fs-12"></i>
-                                                            </div>
-                                                            <div class="fw-medium fs-9">{{ $node['label'] ?? $node['id'] }}</div>
-                                                            @if (isset($node['score']))
-                                                                <div class="text-muted fs-9">{{ number_format(($node['score'] ?? 0) * 100, 0) }}%</div>
-                                                            @elseif (isset($node['chunks_retrieved']))
-                                                                <div class="text-muted fs-9">{{ $node['chunks_retrieved'] }} chunks</div>
-                                                            @endif
-                                                        </div>
-                                                        @if (!$loop->last)
-                                                            <i class="bx bx-chevron-right text-muted mt-1 fs-10"></i>
-                                                        @endif
-                                                    @endforeach
+                                                {{-- vis.js graph container --}}
+                                                <div id="veritrial-graph-{{ $msg->id }}" style="height: 340px; border-radius: 8px; overflow: hidden; background: var(--bs-body-bg); border: 1px solid var(--bs-border-color);"
+                                                     data-dag="{{ htmlspecialchars(json_encode($msg->provenance_dag), ENT_QUOTES, 'UTF-8') }}">
+                                                </div>
+                                                <div class="text-muted fs-10 mt-1 text-center">
+                                                    Click nodes to inspect &nbsp;&middot;&nbsp;
+                                                    <span style="color:#10b981;">&#9632;</span> supported &nbsp;
+                                                    <span style="color:#ef4444;">&#9632;</span> unsupported &nbsp;
+                                                    <span style="color:#6b7280;">&#9632;</span> agent &nbsp;
+                                                    <span style="color:#6366f1;">&#9632;</span> question &nbsp;
+                                                    <span style="color:#8b5cf6;">&#9632;</span> answer
                                                 </div>
 
-                                                {{-- Claims --}}
-                                                @php $claimNodes = collect($dag['nodes'] ?? [])->where('type', 'claim'); @endphp
-                                                @if ($claimNodes->count())
-                                                    <div class="border-top pt-2 mt-1">
-                                                        <span class="fw-semibold fs-10">Claims ({{ $claimNodes->count() }})</span>
-                                                        <div class="d-flex flex-column gap-1 mt-1">
-                                                            @foreach ($claimNodes->take(5) as $claim)
-                                                                @php $isSupported = ($claim['verdict'] ?? '') === 'supported'; @endphp
-                                                                <div class="d-flex align-items-center gap-1 fs-10">
-                                                                    <i class="bx bx-{{ $isSupported ? 'check' : 'x' }} text-{{ $isSupported ? 'success' : 'danger' }}"></i>
-                                                                    <span class="text-truncate">{{ $claim['label'] ?? 'Claim' }}</span>
-                                                                </div>
-                                                            @endforeach
-                                                            @if ($claimNodes->count() > 5)
-                                                                <span class="text-muted fs-9">+ {{ $claimNodes->count() - 5 }} more</span>
-                                                            @endif
-                                                        </div>
-                                                    </div>
-                                                @endif
-
-                                                {{-- Error Localization --}}
+                                                {{-- Error Localization (kept as text fallback) --}}
                                                 @if (!empty($dag['metadata']['error_localization']))
-                                                    <div class="border-top pt-2 mt-1">
+                                                    <div class="border-top pt-2 mt-2">
                                                         <span class="fw-semibold fs-10 text-danger">Error Localization</span>
                                                         @foreach (array_slice($dag['metadata']['error_localization'], 0, 2) as $err)
                                                             <div class="text-danger fs-10 mt-1">
-                                                                <i class="bx bx-error-circle me-1"></i>{{ Str::limit($err['claim'] ?? '', 60) }}
+                                                                <iconify-icon icon="iconamoon:sign-warning-duotone" class="me-1"></iconify-icon>{{ Str::limit($err['claim'] ?? '', 80) }}
                                                             </div>
                                                         @endforeach
                                                     </div>
@@ -467,6 +445,203 @@
                                     @endif
 
                                     </div>{{-- end details-panels-container --}}
+
+                                    {{-- Safety Cockpit --}}
+                                    @if ($msg->status === 'completed' && $msg->safety_level && $msg->composite_safety_score !== null)
+                                    @php
+                                        $ckPct = round($msg->composite_safety_score * 100);
+                                        $ckLevel = $msg->safety_level; // green / yellow / red
+                                        $ckBannerClass = ['green' => 'cockpit-banner-green', 'yellow' => 'cockpit-banner-yellow', 'red' => 'cockpit-banner-red'][$ckLevel] ?? 'cockpit-banner-green';
+                                        $ckColor = ['green' => 'success', 'yellow' => 'warning', 'red' => 'danger'][$ckLevel] ?? 'success';
+                                        $ckLabelText = ['green' => 'GROUNDED', 'yellow' => 'REVIEW NEEDED', 'red' => 'BLOCKED'][$ckLevel] ?? 'GROUNDED';
+                                        $ckIcon = ['green' => 'iconamoon:shield-yes-duotone', 'yellow' => 'iconamoon:shield-duotone', 'red' => 'iconamoon:shield-cross-duotone'][$ckLevel] ?? 'iconamoon:shield-yes-duotone';
+                                        $claimNodesForCockpit = collect(json_decode($msg->provenance_dag, true)['nodes'] ?? [])->where('type', 'claim');
+                                    @endphp
+                                    <div class="safety-cockpit-card mb-3">
+                                        {{-- Banner --}}
+                                        <div class="{{ $ckBannerClass }} cockpit-section py-3">
+                                            <div class="d-flex align-items-center gap-3">
+                                                {{-- Left: shield icon + level --}}
+                                                <div class="d-flex align-items-center gap-2 flex-shrink-0">
+                                                    <iconify-icon icon="{{ $ckIcon }}" class="fs-28 text-{{ $ckColor }}"></iconify-icon>
+                                                    <div>
+                                                        <div class="fw-bold fs-13 text-{{ $ckColor }}">{{ $ckLabelText }}</div>
+                                                        <div class="text-muted fs-10">Safety Cockpit</div>
+                                                    </div>
+                                                </div>
+                                                {{-- Center: score pills --}}
+                                                <div class="d-flex flex-wrap gap-1 flex-grow-1 justify-content-center">
+                                                    @if ($msg->groundedness_score !== null)
+                                                        <span class="score-pill bg-primary-subtle text-primary">
+                                                            Groundedness: {{ number_format($msg->groundedness_score * 100, 0) }}%
+                                                        </span>
+                                                    @endif
+                                                    @if ($msg->lettuce_score !== null)
+                                                        <span class="score-pill bg-success-subtle text-success">
+                                                            NLI: {{ number_format($msg->lettuce_score * 100, 0) }}%
+                                                        </span>
+                                                    @endif
+                                                    @if ($msg->confidence_score !== null)
+                                                        <span class="score-pill bg-info-subtle text-info">
+                                                            Confidence: {{ number_format($msg->confidence_score * 100, 0) }}%
+                                                        </span>
+                                                    @endif
+                                                </div>
+                                                {{-- Right: composite score --}}
+                                                <div class="text-end flex-shrink-0">
+                                                    <div class="cockpit-score-big text-{{ $ckColor }}">{{ $ckPct }}%</div>
+                                                    <div class="text-muted fs-10">Composite</div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {{-- Ring Breakdown (collapsible) --}}
+                                        <div class="cockpit-section">
+                                            <div class="cockpit-toggle text-muted mb-2" data-bs-toggle="collapse" data-bs-target="#cockpit-rings-{{ $msg->id }}">
+                                                <span><iconify-icon icon="iconamoon:circle-duotone" class="me-1"></iconify-icon>Ring Breakdown</span>
+                                                <iconify-icon icon="iconamoon:arrow-down-2-duotone"></iconify-icon>
+                                            </div>
+                                            <div class="collapse" id="cockpit-rings-{{ $msg->id }}">
+                                                @php
+                                                    $ckRings = [
+                                                        ['label' => 'Ring 1: Azure Groundedness', 'value' => $msg->groundedness_score, 'color' => 'primary', 'weight' => '50%'],
+                                                        ['label' => 'Ring 2: LettuceDetect NLI',  'value' => $msg->lettuce_score,     'color' => 'success', 'weight' => '30%'],
+                                                        ['label' => 'Ring 3: SRLM Confidence',    'value' => $msg->confidence_score,  'color' => 'info',    'weight' => '20%'],
+                                                    ];
+                                                @endphp
+                                                @foreach ($ckRings as $ckRing)
+                                                    <div class="mb-2">
+                                                        <div class="d-flex justify-content-between align-items-center mb-1">
+                                                            <span class="fs-11 fw-medium">
+                                                                {{ $ckRing['label'] }}
+                                                                <span class="badge bg-{{ $ckRing['color'] }}-subtle text-{{ $ckRing['color'] }} ms-1 fs-9">{{ $ckRing['weight'] }}</span>
+                                                            </span>
+                                                            <span class="fw-bold fs-12 text-{{ $ckRing['color'] }}">
+                                                                @if ($ckRing['value'] !== null)
+                                                                    {{ number_format($ckRing['value'] * 100, 1) }}%
+                                                                @else
+                                                                    <span class="text-muted">N/A</span>
+                                                                @endif
+                                                            </span>
+                                                        </div>
+                                                        <div class="progress" style="height: 5px; border-radius: 4px;">
+                                                            @if ($ckRing['value'] !== null)
+                                                                <div class="progress-bar bg-{{ $ckRing['color'] }}" role="progressbar" style="width: {{ $ckRing['value'] * 100 }}%"></div>
+                                                            @else
+                                                                <div class="progress-bar bg-secondary progress-bar-striped" role="progressbar" style="width: 100%; opacity: 0.2;"></div>
+                                                            @endif
+                                                        </div>
+                                                    </div>
+                                                @endforeach
+                                            </div>
+                                        </div>
+
+                                        {{-- Claims Panel (collapsible) --}}
+                                        @if ($claimNodesForCockpit->count())
+                                        <div class="cockpit-section">
+                                            <div class="cockpit-toggle text-muted mb-2" data-bs-toggle="collapse" data-bs-target="#cockpit-claims-{{ $msg->id }}">
+                                                <span>
+                                                    <iconify-icon icon="iconamoon:file-document-duotone" class="me-1"></iconify-icon>
+                                                    Claims ({{ $claimNodesForCockpit->count() }})
+                                                    &nbsp;
+                                                    <span class="badge bg-success-subtle text-success fs-9">{{ $claimNodesForCockpit->where('verdict', 'supported')->count() }} supported</span>
+                                                    <span class="badge bg-danger-subtle text-danger fs-9 ms-1">{{ $claimNodesForCockpit->where('verdict', '!=', 'supported')->count() }} unsupported</span>
+                                                </span>
+                                                <iconify-icon icon="iconamoon:arrow-down-2-duotone"></iconify-icon>
+                                            </div>
+                                            <div class="collapse" id="cockpit-claims-{{ $msg->id }}">
+                                                <div class="table-responsive">
+                                                    <table class="table table-sm table-borderless mb-0 fs-11">
+                                                        <thead>
+                                                            <tr class="text-muted">
+                                                                <th class="fw-medium">Claim</th>
+                                                                <th class="fw-medium text-center" style="width: 100px;">Verdict</th>
+                                                                <th class="fw-medium text-end" style="width: 110px;">Source</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            @foreach ($claimNodesForCockpit as $ckClaim)
+                                                                @php
+                                                                    $ckVerdict = $ckClaim['verdict'] ?? 'unsupported';
+                                                                    $ckVerdictColor = $ckVerdict === 'supported' ? 'success' : 'danger';
+                                                                    $ckVerdictLabel = ucfirst($ckVerdict);
+                                                                    $ckSource = $ckClaim['source'] ?? ($ckClaim['source_title'] ?? '');
+                                                                @endphp
+                                                                <tr>
+                                                                    <td class="text-truncate" style="max-width: 200px;">
+                                                                        {{ Str::limit($ckClaim['label'] ?? ($ckClaim['text'] ?? 'Claim'), 70) }}
+                                                                    </td>
+                                                                    <td class="text-center">
+                                                                        <span class="badge bg-{{ $ckVerdictColor }}-subtle text-{{ $ckVerdictColor }} fs-9">
+                                                                            <iconify-icon icon="iconamoon:{{ $ckVerdict === 'supported' ? 'check-circle-1-duotone' : 'sign-times-circle-duotone' }}" class="me-1"></iconify-icon>
+                                                                            {{ $ckVerdictLabel }}
+                                                                        </span>
+                                                                    </td>
+                                                                    <td class="text-end text-muted text-truncate" style="max-width: 110px;">
+                                                                        {{ Str::limit($ckSource, 25) ?: '—' }}
+                                                                    </td>
+                                                                </tr>
+                                                            @endforeach
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        @endif
+
+                                        {{-- Agent Timeline (collapsible) --}}
+                                        @if ($msg->agentRuns->count())
+                                        <div class="cockpit-section">
+                                            <div class="cockpit-toggle text-muted mb-2" data-bs-toggle="collapse" data-bs-target="#cockpit-timeline-{{ $msg->id }}">
+                                                <span><iconify-icon icon="iconamoon:history-duotone" class="me-1"></iconify-icon>Agent Timeline</span>
+                                                <iconify-icon icon="iconamoon:arrow-down-2-duotone"></iconify-icon>
+                                            </div>
+                                            <div class="collapse" id="cockpit-timeline-{{ $msg->id }}">
+                                                @php
+                                                    $ckAgentIcons = [
+                                                        'content_safety' => 'iconamoon:shield-yes-duotone',
+                                                        'safety'         => 'iconamoon:shield-yes-duotone',
+                                                        'retrieval'      => 'iconamoon:search-duotone',
+                                                        'generation'     => 'iconamoon:lightning-2-duotone',
+                                                        'verification'   => 'iconamoon:check-circle-1-duotone',
+                                                    ];
+                                                    $ckAgentColors = [
+                                                        'content_safety' => '#ef4444',
+                                                        'safety'         => '#ef4444',
+                                                        'retrieval'      => '#3b82f6',
+                                                        'generation'     => '#8b5cf6',
+                                                        'verification'   => '#10b981',
+                                                    ];
+                                                    $ckSortedRuns = $msg->agentRuns->sortBy('created_at');
+                                                @endphp
+                                                <div class="d-flex align-items-center overflow-auto pb-2">
+                                                    @foreach ($ckSortedRuns as $ckRun)
+                                                        @php
+                                                            $ckRunIcon = $ckAgentIcons[$ckRun->agent_type] ?? 'iconamoon:settings-duotone';
+                                                            $ckRunColor = $ckAgentColors[$ckRun->agent_type] ?? '#6b7280';
+                                                            $ckRunStatus = $ckRun->status;
+                                                            $ckRunBg = $ckRunStatus === 'completed' ? '#10b981' : ($ckRunStatus === 'failed' ? '#ef4444' : '#6b7280');
+                                                        @endphp
+                                                        <div class="text-center flex-shrink-0" style="min-width: 70px;">
+                                                            <div class="agent-step-node mx-auto mb-1" style="background: {{ $ckRunBg }}20; border: 2px solid {{ $ckRunBg }};">
+                                                                <iconify-icon icon="{{ $ckRunIcon }}" style="color: {{ $ckRunBg }}; font-size: 16px;"></iconify-icon>
+                                                            </div>
+                                                            <div class="fw-medium fs-9" style="line-height:1.2;">{{ Str::limit(ucwords(str_replace('_',' ',$ckRun->agent_type)), 14) }}</div>
+                                                            @if ($ckRun->latency_ms)
+                                                                <div class="text-muted fs-9">{{ number_format($ckRun->latency_ms) }}ms</div>
+                                                            @endif
+                                                        </div>
+                                                        @if (!$loop->last)
+                                                            <div class="agent-step-line {{ $ckRunStatus === 'completed' ? 'done' : '' }} mx-1" style="min-width: 16px;"></div>
+                                                        @endif
+                                                    @endforeach
+                                                </div>
+                                            </div>
+                                        </div>
+                                        @endif
+                                    </div>
+                                    @endif
+                                    {{-- /Safety Cockpit --}}
 
                                     <div class="mt-1">
                                         <span class="text-muted fs-10">
@@ -891,5 +1066,143 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     });
 });
+</script>
+
+{{-- vis.js VeriTrail interactive graph --}}
+<script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+<script>
+(function () {
+    // Map node type/state to color
+    function nodeColor(node) {
+        var t = node.type || '';
+        if (t === 'question')     return '#6366f1';
+        if (t === 'gate')         return node.passed ? '#10b981' : '#ef4444';
+        if (t === 'agent')        return '#6b7280';
+        if (t === 'verification') return '#3b82f6';
+        if (t === 'claim')        return (node.verdict === 'supported') ? '#10b981' : '#ef4444';
+        if (t === 'source')       return '#f59e0b';
+        if (t === 'answer')       return '#8b5cf6';
+        return '#94a3b8';
+    }
+
+    function buildTooltip(node) {
+        var lines = [];
+        if (node.label) lines.push('<strong>' + node.label + '</strong>');
+        if (node.type)  lines.push('Type: ' + node.type);
+        if (node.score !== undefined && node.score !== null)
+            lines.push('Score: ' + Math.round(node.score * 100) + '%');
+        if (node.verdict) lines.push('Verdict: ' + node.verdict);
+        if (node.latency_ms) lines.push('Latency: ' + node.latency_ms + 'ms');
+        if (node.chunks_retrieved !== undefined) lines.push('Chunks: ' + node.chunks_retrieved);
+        if (node.passed !== undefined) lines.push('Passed: ' + (node.passed ? 'Yes' : 'No'));
+        return lines.join('<br>');
+    }
+
+    function initGraph(container, dagData) {
+        if (!dagData || !dagData.nodes || !dagData.nodes.length) {
+            container.innerHTML = '<div class="text-center text-muted py-4 fs-12">No graph data available</div>';
+            return;
+        }
+
+        var visNodes = dagData.nodes.map(function (n) {
+            var color = nodeColor(n);
+            return {
+                id: n.id,
+                label: (n.label || n.id || '').substring(0, 20),
+                title: buildTooltip(n),
+                color: { background: color + '22', border: color, highlight: { background: color + '44', border: color } },
+                font: { color: color, size: 11, face: 'Inter, system-ui, sans-serif' },
+                borderWidth: 2,
+                shape: n.type === 'question' ? 'ellipse' : (n.type === 'answer' ? 'star' : (n.type === 'claim' ? 'dot' : 'box')),
+                size: n.type === 'answer' ? 22 : (n.type === 'question' ? 20 : 16),
+                _raw: n
+            };
+        });
+
+        var visEdges = (dagData.edges || []).map(function (e, i) {
+            return {
+                id: 'e' + i,
+                from: e.from || e.source,
+                to: e.to || e.target,
+                label: e.label || '',
+                arrows: 'to',
+                color: { color: '#94a3b8', highlight: '#6366f1' },
+                font: { size: 9, color: '#94a3b8', align: 'middle' },
+                smooth: { type: 'cubicBezier', roundness: 0.4 }
+            };
+        });
+
+        var isDark = document.documentElement.getAttribute('data-bs-theme') === 'dark';
+
+        var options = {
+            layout: {
+                hierarchical: {
+                    enabled: true,
+                    direction: 'LR',
+                    sortMethod: 'directed',
+                    nodeSpacing: 100,
+                    levelSeparation: 150
+                }
+            },
+            physics: { enabled: false },
+            interaction: {
+                hover: true,
+                tooltipDelay: 100,
+                navigationButtons: false,
+                zoomView: true
+            },
+            nodes: { borderWidth: 2 },
+            edges: { width: 1.5 }
+        };
+
+        var network = new vis.Network(container, { nodes: new vis.DataSet(visNodes), edges: new vis.DataSet(visEdges) }, options);
+
+        // Custom tooltip on click
+        var tooltip = document.createElement('div');
+        tooltip.className = 'vis-tooltip-custom';
+        tooltip.style.display = 'none';
+        document.body.appendChild(tooltip);
+
+        network.on('click', function (params) {
+            if (params.nodes.length > 0) {
+                var nodeId = params.nodes[0];
+                var nodeData = visNodes.find(function (n) { return n.id === nodeId; });
+                if (nodeData) {
+                    tooltip.innerHTML = buildTooltip(nodeData._raw);
+                    tooltip.style.display = 'block';
+                    tooltip.style.left = (params.event.srcEvent.clientX + 12) + 'px';
+                    tooltip.style.top  = (params.event.srcEvent.clientY - 10) + 'px';
+                }
+            } else {
+                tooltip.style.display = 'none';
+            }
+        });
+        network.on('zoom', function () { tooltip.style.display = 'none'; });
+        network.on('dragStart', function () { tooltip.style.display = 'none'; });
+        document.addEventListener('click', function (e) {
+            if (!container.contains(e.target)) tooltip.style.display = 'none';
+        });
+    }
+
+    // Initialize when VeriTrail collapse panels open (lazy init)
+    document.querySelectorAll('[id^="veritrial-"]').forEach(function (panel) {
+        if (!panel.classList.contains('collapse')) return;
+        var graphContainer = panel.querySelector('[id^="veritrial-graph-"]');
+        if (!graphContainer) return;
+
+        var initialized = false;
+        panel.addEventListener('shown.bs.collapse', function () {
+            if (initialized) return;
+            initialized = true;
+            try {
+                var rawDag = graphContainer.getAttribute('data-dag');
+                var dagData = rawDag ? JSON.parse(rawDag) : null;
+                initGraph(graphContainer, dagData);
+            } catch (e) {
+                graphContainer.innerHTML = '<div class="text-center text-muted py-4 fs-12">Failed to render graph</div>';
+            }
+        });
+    });
+})();
 </script>
 @endpush

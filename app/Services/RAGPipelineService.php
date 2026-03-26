@@ -144,7 +144,7 @@ class RAGPipelineService
 
             // Composite safety scoring
             $compositeSafety = $this->computeCompositeSafety($groundednessScore, $lettuceScore, $confidenceScore);
-            $safetyLevel = $this->determineSafetyLevel($compositeSafety);
+            $safetyLevel = $this->determineSafetyLevel($compositeSafety, $domain);
 
             // Auto-correction: if ungrounded segments detected, flag them in the answer
             $correctedAnswer = $answer;
@@ -623,10 +623,13 @@ PROMPT;
         return round($composite, 4);
     }
 
-    private function determineSafetyLevel(float $composite): string
+    private function determineSafetyLevel(float $score, ?Domain $domain = null): string
     {
-        if ($composite >= 0.75) return 'green';
-        if ($composite >= 0.45) return 'yellow';
+        $greenThreshold = $domain?->safety_threshold ?? 0.75;
+        $yellowThreshold = $domain?->safety_threshold ? ($domain->safety_threshold * 0.6) : 0.45;
+
+        if ($score >= $greenThreshold) return 'green';
+        if ($score >= $yellowThreshold) return 'yellow';
         return 'red';
     }
 

@@ -79,8 +79,9 @@
                 {{-- User Menu --}}
                 <div class="dropdown topbar-item">
                     <a type="button" class="topbar-button" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
-                        <span class="d-flex align-items-center">
-                            <img class="rounded-circle" width="32" src="{{ asset('images/users/avatar-1.jpg') }}" alt="User Avatar">
+                        <span class="d-flex align-items-center justify-content-center rounded-circle bg-primary-subtle"
+                              style="width: 32px; height: 32px;">
+                            <iconify-icon icon="iconamoon:profile-circle-duotone" class="text-primary" style="font-size: 22px;"></iconify-icon>
                         </span>
                     </a>
                     <div class="dropdown-menu dropdown-menu-end">

@@ -10,6 +10,7 @@ class Domain extends Model
     protected $fillable = [
         'name', 'slug', 'display_name', 'icon', 'color',
         'system_prompt', 'citation_format', 'is_active',
+        'safety_threshold', 'groundedness_level',
     ];
 
     protected $casts = [

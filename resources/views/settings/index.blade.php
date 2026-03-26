@@ -169,13 +169,19 @@
             <iconify-icon icon="iconamoon:category-duotone" class="text-info me-1"></iconify-icon>
             Domain Configuration
         </h5>
-        <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#addDomainModal">
-            <i class="bx bx-plus me-1"></i> Add Domain
-        </button>
+        <div class="d-flex align-items-center gap-2">
+            <div class="input-group input-group-sm" style="width: 220px;">
+                <span class="input-group-text bg-transparent border-end-0"><i class="bx bx-search"></i></span>
+                <input type="text" class="form-control border-start-0" id="domainSearch" placeholder="Search domains...">
+            </div>
+            <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#addDomainModal">
+                <i class="bx bx-plus me-1"></i> Add Domain
+            </button>
+        </div>
     </div>
     <div class="card-body p-0">
         <div class="table-responsive">
-            <table class="table table-hover mb-0">
+            <table class="table table-hover mb-0" id="domainTable">
                 <thead>
                     <tr>
                         <th>Domain</th>
@@ -331,9 +337,26 @@
                             <option value="apa">APA</option>
                         </select>
                     </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-medium">Safety Threshold</label>
+                        <div class="d-flex align-items-center gap-2">
+                            <input type="range" class="form-range flex-grow-1" name="safety_threshold"
+                                   id="add_threshold"
+                                   min="0.45" max="0.95" step="0.05"
+                                   value="0.75"
+                                   oninput="document.getElementById('add_threshold_val').textContent = Math.round(this.value * 100) + '%'">
+                            <span class="badge bg-primary-subtle text-primary fw-bold" id="add_threshold_val">75%</span>
+                        </div>
+                        <div class="form-text">Green threshold for this domain. Legal=80%, Healthcare=90%, Finance=75%</div>
+                    </div>
                     <div class="mb-0">
-                        <label class="form-label fw-medium">System Prompt</label>
-                        <textarea class="form-control" name="system_prompt" rows="3" placeholder="Custom instructions for this domain..."></textarea>
+                        <div class="d-flex align-items-center justify-content-between mb-1">
+                            <label class="form-label fw-medium mb-0">System Prompt</label>
+                            <button type="button" class="btn btn-sm btn-outline-primary generate-prompt-btn" data-target="add_system_prompt">
+                                <iconify-icon icon="iconamoon:lightning-2-duotone" class="me-1"></iconify-icon> Generate with AI
+                            </button>
+                        </div>
+                        <textarea class="form-control" name="system_prompt" id="add_system_prompt" rows="3" placeholder="Custom instructions for this domain..."></textarea>
                         <div class="form-text">Optional prompt that guides how the LLM answers questions in this domain.</div>
                     </div>
                 </div>
@@ -397,8 +420,27 @@
                             </select>
                         </div>
                         <div class="mb-3">
-                            <label class="form-label fw-medium">System Prompt</label>
-                            <textarea class="form-control" name="system_prompt" rows="3">{{ $domain->system_prompt }}</textarea>
+                            <label class="form-label fw-medium">Safety Threshold</label>
+                            <div class="d-flex align-items-center gap-2">
+                                <input type="range" class="form-range flex-grow-1" name="safety_threshold"
+                                       id="threshold_{{ $domain->id }}"
+                                       min="0.45" max="0.95" step="0.05"
+                                       value="{{ $domain->safety_threshold ?? 0.75 }}"
+                                       oninput="document.getElementById('threshold_val_{{ $domain->id }}').textContent = Math.round(this.value * 100) + '%'">
+                                <span class="badge bg-primary-subtle text-primary fw-bold" id="threshold_val_{{ $domain->id }}">
+                                    {{ number_format(($domain->safety_threshold ?? 0.75) * 100, 0) }}%
+                                </span>
+                            </div>
+                            <div class="form-text">Green threshold for this domain. Legal=80%, Healthcare=90%, Finance=75%</div>
+                        </div>
+                        <div class="mb-3">
+                            <div class="d-flex align-items-center justify-content-between mb-1">
+                                <label class="form-label fw-medium mb-0">System Prompt</label>
+                                <button type="button" class="btn btn-sm btn-outline-primary generate-prompt-btn" data-target="edit_system_prompt_{{ $domain->id }}">
+                                    <iconify-icon icon="iconamoon:lightning-2-duotone" class="me-1"></iconify-icon> Generate with AI
+                                </button>
+                            </div>
+                            <textarea class="form-control" name="system_prompt" id="edit_system_prompt_{{ $domain->id }}" rows="3">{{ $domain->system_prompt }}</textarea>
                         </div>
                         <div class="mb-0">
                             <div class="form-check form-switch">
@@ -418,3 +460,68 @@
 @endforeach
 
 @endsection
+
+@push('scripts')
+<script>
+    // Domain search filter
+    document.getElementById('domainSearch').addEventListener('input', function () {
+        const query = this.value.toLowerCase();
+        document.querySelectorAll('#domainTable tbody tr').forEach(row => {
+            const text = row.textContent.toLowerCase();
+            row.style.display = text.includes(query) ? '' : 'none';
+        });
+    });
+
+    // AI prompt generation
+    document.querySelectorAll('.generate-prompt-btn').forEach(btn => {
+        btn.addEventListener('click', async function () {
+            const targetId = this.dataset.target;
+            const textarea = document.getElementById(targetId);
+            const modal = this.closest('.modal');
+            const domainInput = modal.querySelector('input[name="display_name"]');
+            const citationSelect = modal.querySelector('select[name="citation_format"]');
+
+            const domainName = domainInput?.value?.trim();
+            if (!domainName) {
+                domainInput.focus();
+                domainInput.classList.add('is-invalid');
+                setTimeout(() => domainInput.classList.remove('is-invalid'), 2000);
+                return;
+            }
+
+            const originalText = this.innerHTML;
+            this.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Generating...';
+            this.disabled = true;
+
+            try {
+                const res = await fetch('{{ route("api.generate-domain-prompt") }}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                        'Accept': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        domain_name: domainName,
+                        citation_format: citationSelect?.value || 'inline',
+                    }),
+                });
+
+                const data = await res.json();
+                if (res.ok && data.prompt) {
+                    textarea.value = data.prompt;
+                    textarea.style.height = 'auto';
+                    textarea.style.height = textarea.scrollHeight + 'px';
+                } else {
+                    alert(data.error || 'Failed to generate prompt. Please try again.');
+                }
+            } catch (e) {
+                alert('Network error. Please check your connection and try again.');
+            } finally {
+                this.innerHTML = originalText;
+                this.disabled = false;
+            }
+        });
+    });
+</script>
+@endpush

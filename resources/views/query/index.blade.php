@@ -113,6 +113,30 @@
 
     {{-- Main Content --}}
     <div class="col-lg-8">
+        {{-- Specialization Policy Preview Card --}}
+        @php $defaultDomain = $domains->first(); @endphp
+        @if ($defaultDomain)
+        <div class="card mb-3" id="specializationCard">
+            <div class="card-body py-3">
+                <div class="d-flex align-items-center gap-2 mb-2">
+                    <iconify-icon id="specIcon" icon="{{ $defaultDomain->icon ?? 'iconamoon:category-duotone' }}" class="fs-20 text-primary"></iconify-icon>
+                    <h6 class="fw-semibold mb-0 fs-14" id="specName">{{ $defaultDomain->display_name }}</h6>
+                    @php
+                        $thresh = $defaultDomain->safety_threshold ?? 0.75;
+                        $threshBadge = $thresh >= 0.80 ? 'success' : ($thresh >= 0.70 ? 'warning' : 'orange');
+                        $threshLabel = 'Green ≥' . number_format($thresh * 100, 0) . '%';
+                    @endphp
+                    <span class="badge rounded-pill ms-auto bg-{{ $threshBadge === 'orange' ? 'danger' : $threshBadge }}-subtle text-{{ $threshBadge === 'orange' ? 'danger' : $threshBadge }}" id="specThreshold">{{ $threshLabel }}</span>
+                </div>
+                <p class="text-muted fs-12 mb-1" id="specPrompt">{{ Str::limit($defaultDomain->system_prompt ?? 'No system prompt configured for this domain.', 150) }}</p>
+                <div class="d-flex gap-3 fs-11 text-muted">
+                    <span><iconify-icon icon="iconamoon:document-duotone" class="me-1"></iconify-icon><span id="specDocs">{{ $defaultDomain->documents->count() }}</span> documents</span>
+                    <span><iconify-icon icon="iconamoon:shield-yes-duotone" class="me-1"></iconify-icon>Three-Ring Defense active</span>
+                </div>
+            </div>
+        </div>
+        @endif
+
         {{-- Welcome / Getting Started --}}
         <div class="card">
             <div class="card-body text-center py-5">
@@ -243,7 +267,60 @@
 
 @push('scripts')
 <script>
+window.axiomeerDomains = @json($domains);
+</script>
+<script>
 document.addEventListener('DOMContentLoaded', function () {
+    // Specialization card update logic
+    var domains = window.axiomeerDomains || [];
+
+    function updateSpecCard(domainId) {
+        var domain = domains.find(function (d) { return d.id == domainId; });
+        if (!domain) return;
+
+        var card = document.getElementById('specializationCard');
+        if (!card) return;
+
+        document.getElementById('specIcon').setAttribute('icon', domain.icon || 'iconamoon:category-duotone');
+        document.getElementById('specName').textContent = domain.display_name;
+
+        var thresh = domain.safety_threshold != null ? parseFloat(domain.safety_threshold) : 0.75;
+        var threshPct = Math.round(thresh * 100);
+        var badgeClass, badgeText;
+        if (thresh >= 0.80) {
+            badgeClass = 'bg-success-subtle text-success';
+        } else if (thresh >= 0.70) {
+            badgeClass = 'bg-warning-subtle text-warning';
+        } else {
+            badgeClass = 'bg-danger-subtle text-danger';
+        }
+        badgeText = 'Green \u2265' + threshPct + '%';
+        var specThresh = document.getElementById('specThreshold');
+        specThresh.className = 'badge rounded-pill ms-auto ' + badgeClass;
+        specThresh.textContent = badgeText;
+
+        var prompt = domain.system_prompt || 'No system prompt configured for this domain.';
+        document.getElementById('specPrompt').textContent = prompt.length > 150 ? prompt.substring(0, 150) + '...' : prompt;
+
+        var docCount = domain.documents ? domain.documents.length : 0;
+        document.getElementById('specDocs').textContent = docCount;
+    }
+
+    // Listen for domain radio changes in the new chat modal
+    document.querySelectorAll('input[name="domain_id"]').forEach(function (radio) {
+        radio.addEventListener('change', function () {
+            if (this.checked) updateSpecCard(this.value);
+        });
+    });
+
+    // Listen for topbar domain selector clicks (axiomeer-domain-item)
+    document.querySelectorAll('.axiomeer-domain-item').forEach(function (item) {
+        item.addEventListener('click', function () {
+            var domainId = this.dataset.domainId;
+            if (domainId) updateSpecCard(domainId);
+        });
+    });
+
     // Pipeline loading overlay on form submit
     document.querySelectorAll('form[action*="query"]').forEach(function (form) {
         form.addEventListener('submit', function () {
