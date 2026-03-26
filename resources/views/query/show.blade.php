@@ -146,9 +146,9 @@
                                             </button>
                                         @endif
                                         @if ($msg->provenance_dag)
-                                            <button class="btn btn-sm btn-outline-secondary details-toggle rounded-pill fs-11"
+                                            <button class="btn btn-sm btn-info details-toggle rounded-pill fs-11"
                                                     data-bs-toggle="collapse" data-bs-target="#veritrial-{{ $msg->id }}">
-                                                <i class="bx bx-show me-1"></i>VeriTrail
+                                                <iconify-icon icon="iconamoon:share-2-duotone" class="me-1"></iconify-icon>VeriTrail DAG
                                             </button>
                                         @endif
                                         @if ($evalMetric)
@@ -316,36 +316,37 @@
                                         </div>
                                     @endif
 
-                                    {{-- VeriTrail DAG Collapse (vis.js interactive graph) --}}
+                                    {{-- VeriTrail DAG (vis.js interactive graph) — open by default --}}
                                     @if ($msg->provenance_dag)
                                         @php $dag = $msg->provenance_dag; @endphp
-                                        <div class="collapse mb-2" id="veritrial-{{ $msg->id }}">
-                                            <div class="border rounded p-3">
+                                        <div class="collapse show mb-2" id="veritrial-{{ $msg->id }}">
+                                            <div class="border border-info rounded p-3" style="background: rgba(14,165,233,0.03);">
                                                 <div class="d-flex justify-content-between align-items-center mb-2">
-                                                    <h6 class="fw-semibold fs-12 mb-0">
-                                                        <iconify-icon icon="iconamoon:share-2-duotone" class="text-info me-1"></iconify-icon>
+                                                    <h6 class="fw-bold fs-13 mb-0 text-info">
+                                                        <iconify-icon icon="iconamoon:share-2-duotone" class="me-1"></iconify-icon>
                                                         VeriTrail Provenance DAG
                                                     </h6>
                                                     <div class="d-flex align-items-center gap-2">
                                                         <code class="fs-9 text-muted">{{ $dag['trace_id'] ?? '' }}</code>
-                                                        <button class="btn btn-sm p-0 text-muted panel-hide-btn" data-bs-toggle="collapse" data-bs-target="#veritrial-{{ $msg->id }}">
+                                                        <button class="btn btn-sm p-0 text-muted" data-bs-toggle="collapse" data-bs-target="#veritrial-{{ $msg->id }}">
                                                             <i class="bx bx-x fs-16"></i>
                                                         </button>
                                                     </div>
                                                 </div>
-                                                <p class="text-muted fs-10 mb-2">Interactive provenance graph. Click nodes to inspect each pipeline step.</p>
+                                                <p class="text-muted fs-11 mb-2">Interactive provenance graph — click any node to inspect that pipeline step.</p>
 
                                                 {{-- vis.js graph container --}}
-                                                <div id="veritrial-graph-{{ $msg->id }}" style="height: 340px; border-radius: 8px; overflow: hidden; background: var(--bs-body-bg); border: 1px solid var(--bs-border-color);"
+                                                <div id="veritrial-graph-{{ $msg->id }}" style="height: 420px; border-radius: 8px; overflow: hidden; background: var(--bs-body-bg); border: 1px solid var(--bs-border-color);"
                                                      data-dag="{{ htmlspecialchars(json_encode($msg->provenance_dag), ENT_QUOTES, 'UTF-8') }}">
                                                 </div>
-                                                <div class="text-muted fs-10 mt-1 text-center">
-                                                    Click nodes to inspect &nbsp;&middot;&nbsp;
-                                                    <span style="color:#10b981;">&#9632;</span> supported &nbsp;
-                                                    <span style="color:#ef4444;">&#9632;</span> unsupported &nbsp;
-                                                    <span style="color:#6b7280;">&#9632;</span> agent &nbsp;
-                                                    <span style="color:#6366f1;">&#9632;</span> question &nbsp;
-                                                    <span style="color:#8b5cf6;">&#9632;</span> answer
+                                                <div class="text-muted fs-10 mt-2 text-center d-flex align-items-center justify-content-center gap-3 flex-wrap">
+                                                    <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#6366f1;"></span> Question</span>
+                                                    <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#6b7280;"></span> Agent</span>
+                                                    <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#0ea5e9;"></span> Verification</span>
+                                                    <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#10b981;"></span> Supported</span>
+                                                    <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#ef4444;"></span> Unsupported</span>
+                                                    <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#f59e0b;"></span> Source</span>
+                                                    <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#8b5cf6;"></span> Answer</span>
                                                 </div>
 
                                                 {{-- Error Localization (kept as text fallback) --}}
