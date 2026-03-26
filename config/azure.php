@@ -47,6 +47,9 @@ return [
     */
     'foundry' => [
         'endpoint' => env('FOUNDRY_ENDPOINT'),
+        'agent_endpoint' => env('FOUNDRY_AGENT_ENDPOINT'),
+        'agent_api_key' => env('FOUNDRY_AGENT_API_KEY'),
+        'agent_id' => env('FOUNDRY_AGENT_ID'),
     ],
 
     /*

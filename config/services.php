@@ -35,4 +35,9 @@ return [
         ],
     ],
 
+    'bing_search' => [
+        'api_key' => env('BING_SEARCH_API_KEY'),
+        'api_host' => env('BING_SEARCH_API_HOST', 'bing-search-apis.p.rapidapi.com'),
+    ],
+
 ];

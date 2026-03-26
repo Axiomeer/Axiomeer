@@ -20,6 +20,9 @@
     <link href="{{ asset('reback-css/icons.min.css') }}" rel="stylesheet" type="text/css">
     <link href="{{ asset('reback-css/app.min.css') }}" rel="stylesheet" type="text/css">
 
+    {{-- Iconify Web Component (renders <iconify-icon> elements) --}}
+    <script src="https://code.iconify.design/iconify-icon/2.1.0/iconify-icon.min.js"></script>
+
     {{-- Axiomeer overrides --}}
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 
@@ -47,6 +50,11 @@
         </div>
 
     </div>
+
+    {{-- Helper Chatbot Widget --}}
+    @auth
+        @include('partials.chatbot-widget')
+    @endauth
 
     {{-- Reback JS --}}
     <script src="{{ asset('reback-css/vendor.min.js') }}"></script>

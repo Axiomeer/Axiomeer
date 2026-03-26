@@ -114,7 +114,7 @@
                             <li class="list-group-item px-0">
                                 <div class="fw-medium fs-13">{{ Str::limit($citation->relatedQuery->question ?? 'Query', 60) }}</div>
                                 <small class="text-muted">
-                                    Relevance: {{ number_format($citation->relevance_score * 100, 0) }}%
+                                    Relevance: {{ number_format(min($citation->relevance_score, 1.0) * 100, 0) }}%
                                     @if ($citation->page_number)
                                         &middot; Page {{ $citation->page_number }}
                                     @endif

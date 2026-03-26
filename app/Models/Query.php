@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class Query extends Model
 {
     protected $fillable = [
-        'user_id', 'domain_id', 'question', 'answer', 'status',
+        'user_id', 'domain_id', 'conversation_id', 'question', 'answer', 'status',
         'groundedness_score', 'lettuce_score', 'confidence_score',
         'composite_safety_score', 'safety_level',
         'retrieved_chunks', 'provenance_dag',
@@ -33,6 +33,11 @@ class Query extends Model
     public function domain(): BelongsTo
     {
         return $this->belongsTo(Domain::class);
+    }
+
+    public function conversation(): BelongsTo
+    {
+        return $this->belongsTo(Conversation::class);
     }
 
     public function citations(): HasMany

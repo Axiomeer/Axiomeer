@@ -20,7 +20,7 @@
                 <div class="avatar-md rounded-circle bg-primary-subtle d-flex align-items-center justify-content-center mx-auto mb-3">
                     <iconify-icon icon="iconamoon:check-circle-1-duotone" class="fs-28 text-primary"></iconify-icon>
                 </div>
-                <h2 class="fw-bold mb-1">{{ $avgFaithfulness ? number_format($avgFaithfulness * 100, 1) . '%' : '&mdash;' }}</h2>
+                <h2 class="fw-bold mb-1">{!! $avgFaithfulness ? number_format($avgFaithfulness * 100, 1) . '%' : '&mdash;' !!}</h2>
                 <p class="text-uppercase fw-medium text-muted mb-0 fs-12">Faithfulness</p>
                 <p class="text-muted fs-12 mb-0">Are claims supported by context?</p>
             </div>
@@ -33,7 +33,7 @@
                 <div class="avatar-md rounded-circle bg-info-subtle d-flex align-items-center justify-content-center mx-auto mb-3">
                     <iconify-icon icon="iconamoon:target-duotone" class="fs-28 text-info"></iconify-icon>
                 </div>
-                <h2 class="fw-bold mb-1">{{ $avgRelevancy ? number_format($avgRelevancy * 100, 1) . '%' : '&mdash;' }}</h2>
+                <h2 class="fw-bold mb-1">{!! $avgRelevancy ? number_format($avgRelevancy * 100, 1) . '%' : '&mdash;' !!}</h2>
                 <p class="text-uppercase fw-medium text-muted mb-0 fs-12">Answer Relevancy</p>
                 <p class="text-muted fs-12 mb-0">Is the answer relevant to the question?</p>
             </div>
@@ -46,7 +46,7 @@
                 <div class="avatar-md rounded-circle bg-warning-subtle d-flex align-items-center justify-content-center mx-auto mb-3">
                     <iconify-icon icon="iconamoon:search-duotone" class="fs-28 text-warning"></iconify-icon>
                 </div>
-                <h2 class="fw-bold mb-1">{{ $avgPrecision ? number_format($avgPrecision * 100, 1) . '%' : '&mdash;' }}</h2>
+                <h2 class="fw-bold mb-1">{!! $avgPrecision ? number_format($avgPrecision * 100, 1) . '%' : '&mdash;' !!}</h2>
                 <p class="text-uppercase fw-medium text-muted mb-0 fs-12">Context Precision</p>
                 <p class="text-muted fs-12 mb-0">Are retrieved chunks relevant?</p>
             </div>
@@ -59,7 +59,7 @@
                 <div class="avatar-md rounded-circle bg-success-subtle d-flex align-items-center justify-content-center mx-auto mb-3">
                     <iconify-icon icon="iconamoon:file-document-duotone" class="fs-28 text-success"></iconify-icon>
                 </div>
-                <h2 class="fw-bold mb-1">{{ $avgRecall ? number_format($avgRecall * 100, 1) . '%' : '&mdash;' }}</h2>
+                <h2 class="fw-bold mb-1">{!! $avgRecall ? number_format($avgRecall * 100, 1) . '%' : '&mdash;' !!}</h2>
                 <p class="text-uppercase fw-medium text-muted mb-0 fs-12">Context Recall</p>
                 <p class="text-muted fs-12 mb-0">Are all relevant docs retrieved?</p>
             </div>
@@ -173,10 +173,10 @@
                                         </span>
                                     </td>
                                     <td>{{ $dm['count'] }}</td>
-                                    <td>{{ $dm['faithfulness'] ? number_format($dm['faithfulness'] * 100, 1) . '%' : '—' }}</td>
-                                    <td>{{ $dm['answer_relevancy'] ? number_format($dm['answer_relevancy'] * 100, 1) . '%' : '—' }}</td>
-                                    <td>{{ $dm['context_precision'] ? number_format($dm['context_precision'] * 100, 1) . '%' : '—' }}</td>
-                                    <td>{{ $dm['context_recall'] ? number_format($dm['context_recall'] * 100, 1) . '%' : '—' }}</td>
+                                    <td>{!! $dm['faithfulness'] ? number_format($dm['faithfulness'] * 100, 1) . '%' : '&mdash;' !!}</td>
+                                    <td>{!! $dm['answer_relevancy'] ? number_format($dm['answer_relevancy'] * 100, 1) . '%' : '&mdash;' !!}</td>
+                                    <td>{!! $dm['context_precision'] ? number_format($dm['context_precision'] * 100, 1) . '%' : '&mdash;' !!}</td>
+                                    <td>{!! $dm['context_recall'] ? number_format($dm['context_recall'] * 100, 1) . '%' : '&mdash;' !!}</td>
                                 </tr>
                             @endforeach
                         </tbody>
@@ -216,9 +216,9 @@
                                             {{ $eval->domain->display_name ?? 'N/A' }}
                                         </span>
                                     </td>
-                                    <td>{{ $eval->faithfulness ? number_format($eval->faithfulness * 100, 1) . '%' : '—' }}</td>
-                                    <td>{{ $eval->answer_relevancy ? number_format($eval->answer_relevancy * 100, 1) . '%' : '—' }}</td>
-                                    <td>{{ $eval->groundedness_pct ? number_format($eval->groundedness_pct, 1) . '%' : '—' }}</td>
+                                    <td>{!! $eval->faithfulness ? number_format($eval->faithfulness * 100, 1) . '%' : '&mdash;' !!}</td>
+                                    <td>{!! $eval->answer_relevancy ? number_format($eval->answer_relevancy * 100, 1) . '%' : '&mdash;' !!}</td>
+                                    <td>{!! $eval->groundedness_pct ? number_format($eval->groundedness_pct, 1) . '%' : '&mdash;' !!}</td>
                                     <td class="fs-12 text-muted">{{ $eval->created_at->format('M d H:i') }}</td>
                                 </tr>
                             @empty

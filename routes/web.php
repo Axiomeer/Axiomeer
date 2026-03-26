@@ -8,6 +8,8 @@ use App\Http\Controllers\DocumentController;
 use App\Http\Controllers\EvaluationController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\QueryController;
+use App\Http\Controllers\ResponsibleAiController;
+use App\Http\Controllers\SafetyTestController;
 use App\Http\Controllers\SettingsController;
 use Illuminate\Support\Facades\Route;
 
@@ -33,7 +35,7 @@ Route::middleware('auth')->group(function () {
     Route::resource('documents', DocumentController::class)->except(['edit', 'update']);
 
     // Responsible AI (all roles)
-    Route::get('/responsible-ai', fn () => view('responsible-ai.index'))->name('responsible-ai');
+    Route::get('/responsible-ai', [ResponsibleAiController::class, 'index'])->name('responsible-ai');
 
     // Analytics (admin + analyst)
     Route::middleware('role:admin,analyst')->group(function () {
@@ -45,13 +47,19 @@ Route::middleware('auth')->group(function () {
     // System (admin only)
     Route::middleware('role:admin')->group(function () {
         Route::get('/settings', [SettingsController::class, 'index'])->name('settings');
+        Route::post('/settings/domains', [SettingsController::class, 'storeDomain'])->name('settings.domains.store');
+        Route::put('/settings/domains/{domain}', [SettingsController::class, 'updateDomain'])->name('settings.domains.update');
+        Route::delete('/settings/domains/{domain}', [SettingsController::class, 'destroyDomain'])->name('settings.domains.destroy');
         Route::get('/agents', [AgentPipelineController::class, 'index'])->name('agents');
+        Route::get('/safety-test', [SafetyTestController::class, 'index'])->name('safety-test');
+        Route::post('/safety-test/run', [SafetyTestController::class, 'run'])->name('safety-test.run');
     });
 });
 
 // API endpoints (authenticated)
 Route::middleware('auth')->prefix('api')->group(function () {
     Route::get('/speech-token', \App\Http\Controllers\Api\SpeechTokenController::class)->name('api.speech-token');
+    Route::post('/web-search', [\App\Http\Controllers\Api\WebSearchController::class, 'search'])->name('api.web-search');
 });
 
 require __DIR__.'/auth.php';

@@ -4,6 +4,7 @@ namespace App\Services\Azure;
 
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 
 class ContentSafetyService
 {
@@ -153,7 +154,9 @@ class ContentSafetyService
             ];
         }
 
-        $url = "{$this->endpoint}/contentsafety/text:detectGroundedness?api-version={$this->apiVersion}";
+        // Groundedness Detection requires api-version 2024-09-15-preview or later
+        $groundednessApiVersion = '2024-09-15-preview';
+        $url = "{$this->endpoint}/contentsafety/text:detectGroundedness?api-version={$groundednessApiVersion}";
 
         $startTime = microtime(true);
 
@@ -171,14 +174,16 @@ class ContentSafetyService
         $latencyMs = (int) ((microtime(true) - $startTime) * 1000);
 
         if ($response->failed()) {
-            Log::error('Groundedness check failed', [
+            Log::warning('Groundedness check failed — composite score will redistribute weight to other rings', [
                 'status' => $response->status(),
-                'body' => $response->body(),
+                'body' => Str::limit($response->body(), 200),
+                'url' => $url,
             ]);
 
             return [
                 'success' => false,
                 'error' => $response->json('error.message', 'Groundedness check failed'),
+                'status_code' => $response->status(),
                 'latency_ms' => $latencyMs,
             ];
         }
