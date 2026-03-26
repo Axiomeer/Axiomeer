@@ -6,7 +6,7 @@
 @push('styles')
 <link rel="stylesheet" href="https://unpkg.com/vis-network/standalone/umd/vis-network.min.css">
 <style>
-    .chat-container { max-height: calc(100vh - 300px); overflow-y: auto; scroll-behavior: smooth; }
+    .chat-container { max-height: calc(100vh - 220px); overflow-y: auto; scroll-behavior: smooth; padding-bottom: 1rem; }
     .chat-bubble { max-width: 92%; animation: fadeInUp 0.3s ease; }
     .chat-bubble-user { margin-left: auto; }
     .chat-bubble-bot { margin-right: auto; }
@@ -345,7 +345,7 @@
 
                                                 {{-- vis.js graph container --}}
                                                 <div id="veritrial-graph-{{ $msg->id }}" style="height: 420px; border-radius: 8px; overflow: hidden; background: var(--bs-body-bg); border: 1px solid var(--bs-border-color);"
-                                                     data-dag="{{ htmlspecialchars(json_encode($msg->provenance_dag), ENT_QUOTES, 'UTF-8') }}">
+                                                     data-dag="{{ json_encode($msg->provenance_dag) }}">
                                                 </div>
                                                 <div class="text-muted fs-10 mt-2 text-center d-flex align-items-center justify-content-center gap-3 flex-wrap">
                                                     <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#6366f1;"></span> Question</span>
@@ -1336,7 +1336,8 @@ document.addEventListener('DOMContentLoaded', function () {
                 var dagData = rawDag ? JSON.parse(rawDag) : null;
                 initGraph(graphContainer, dagData);
             } catch (e) {
-                graphContainer.innerHTML = '<div class="text-center text-muted py-4 fs-12">Failed to render graph</div>';
+                console.error('VeriTrail graph error:', e);
+                graphContainer.innerHTML = '<div class="text-center text-muted py-4 fs-12">Failed to render graph: ' + e.message + '</div>';
             }
         });
     });
