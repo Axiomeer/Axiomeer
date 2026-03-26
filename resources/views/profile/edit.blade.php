@@ -24,6 +24,18 @@
         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
     </div>
 @endif
+@if (session('status') === 'avatar-updated')
+    <div class="alert alert-success alert-dismissible fade show" role="alert">
+        Profile photo updated successfully.
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+@endif
+@if (session('status') === 'avatar-removed')
+    <div class="alert alert-info alert-dismissible fade show" role="alert">
+        Profile photo removed.
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+@endif
 
 <div class="row g-4">
 
@@ -31,11 +43,56 @@
     <div class="col-xl-3 col-lg-4">
         <div class="card text-center">
             <div class="card-body py-4">
-                {{-- Generic user avatar --}}
-                <div class="mx-auto mb-3 d-flex align-items-center justify-content-center rounded-circle bg-primary-subtle"
-                     style="width: 96px; height: 96px;">
-                    <iconify-icon icon="iconamoon:profile-circle-duotone" class="fs-1 text-primary" style="font-size: 56px;"></iconify-icon>
+
+                {{-- Avatar with upload overlay --}}
+                <div class="position-relative mx-auto mb-3" style="width: 96px; height: 96px;">
+                    @if ($user->avatar)
+                        <img src="{{ asset('storage/' . $user->avatar) }}"
+                             alt="{{ $user->name }}"
+                             id="avatarPreview"
+                             class="rounded-circle border border-2 border-primary-subtle"
+                             style="width: 96px; height: 96px; object-fit: cover;">
+                    @else
+                        <div id="avatarPlaceholder" class="d-flex align-items-center justify-content-center rounded-circle bg-primary-subtle"
+                             style="width: 96px; height: 96px;">
+                            <iconify-icon icon="iconamoon:profile-circle-duotone" class="text-primary" style="font-size: 56px;"></iconify-icon>
+                        </div>
+                        <img src="" alt="" id="avatarPreview"
+                             class="rounded-circle border border-2 border-primary-subtle d-none"
+                             style="width: 96px; height: 96px; object-fit: cover;">
+                    @endif
+
+                    {{-- Camera button overlay --}}
+                    <label for="avatarFileInput"
+                           class="position-absolute bottom-0 end-0 d-flex align-items-center justify-content-center rounded-circle bg-primary text-white"
+                           style="width: 28px; height: 28px; cursor: pointer;" title="Change photo">
+                        <iconify-icon icon="iconamoon:camera-duotone" style="font-size: 14px;"></iconify-icon>
+                    </label>
+                    <input type="file" id="avatarFileInput" class="d-none" accept="image/jpeg,image/png,image/gif,image/webp">
                 </div>
+
+                {{-- Avatar action buttons — shown after picking a file --}}
+                <div id="avatarActions" class="d-none mb-2">
+                    <form id="avatarUploadForm" method="POST" action="{{ route('profile.avatar.update') }}" enctype="multipart/form-data">
+                        @csrf
+                        <input type="file" name="avatar" id="avatarHiddenInput" class="d-none">
+                        <button type="submit" class="btn btn-primary btn-sm">
+                            <iconify-icon icon="iconamoon:cloud-upload-duotone" class="me-1"></iconify-icon>Save Photo
+                        </button>
+                        <button type="button" id="avatarCancelBtn" class="btn btn-light btn-sm ms-1">Cancel</button>
+                    </form>
+                </div>
+
+                {{-- Remove photo link (only if avatar set) --}}
+                @if ($user->avatar)
+                    <div class="mb-2">
+                        <form method="POST" action="{{ route('profile.avatar.remove') }}" class="d-inline">
+                            @csrf @method('DELETE')
+                            <button type="submit" class="btn btn-link btn-sm text-danger p-0 fs-12">Remove photo</button>
+                        </form>
+                    </div>
+                @endif
+
                 <h5 class="fw-bold mb-0">{{ $user->name }}</h5>
                 <p class="text-muted fs-13 mb-2">{{ $user->email }}</p>
                 <span class="badge bg-primary-subtle text-primary rounded-pill px-3 py-1 fs-12">
@@ -237,3 +294,59 @@
 </div>
 
 @endsection
+
+@push('scripts')
+<script>
+(function () {
+    const fileInput    = document.getElementById('avatarFileInput');
+    const hiddenInput  = document.getElementById('avatarHiddenInput');
+    const preview      = document.getElementById('avatarPreview');
+    const placeholder  = document.getElementById('avatarPlaceholder');
+    const actions      = document.getElementById('avatarActions');
+    const cancelBtn    = document.getElementById('avatarCancelBtn');
+
+    if (!fileInput) return;
+
+    let originalSrc = preview ? preview.src : '';
+
+    fileInput.addEventListener('change', function () {
+        const file = this.files[0];
+        if (!file) return;
+
+        // Live preview
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            if (placeholder) placeholder.classList.add('d-none');
+            preview.src = e.target.result;
+            preview.classList.remove('d-none');
+        };
+        reader.readAsDataURL(file);
+
+        // Copy file to hidden input inside the upload form
+        const dt = new DataTransfer();
+        dt.items.add(file);
+        hiddenInput.files = dt.files;
+
+        actions.classList.remove('d-none');
+    });
+
+    if (cancelBtn) {
+        cancelBtn.addEventListener('click', function () {
+            fileInput.value = '';
+            hiddenInput.value = '';
+            actions.classList.add('d-none');
+
+            // Restore original state
+            if (originalSrc && originalSrc !== window.location.href) {
+                preview.src = originalSrc;
+                preview.classList.remove('d-none');
+                if (placeholder) placeholder.classList.add('d-none');
+            } else {
+                preview.classList.add('d-none');
+                if (placeholder) placeholder.classList.remove('d-none');
+            }
+        });
+    }
+})();
+</script>
+@endpush

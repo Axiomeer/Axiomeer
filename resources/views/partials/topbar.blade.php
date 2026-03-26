@@ -79,10 +79,17 @@
                 {{-- User Menu --}}
                 <div class="dropdown topbar-item">
                     <a type="button" class="topbar-button" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
-                        <span class="d-flex align-items-center justify-content-center rounded-circle bg-primary-subtle"
-                              style="width: 32px; height: 32px;">
-                            <iconify-icon icon="iconamoon:profile-circle-duotone" class="text-primary" style="font-size: 22px;"></iconify-icon>
-                        </span>
+                        @if (auth()->user()->avatar)
+                            <img src="{{ asset('storage/' . auth()->user()->avatar) }}"
+                                 alt="{{ auth()->user()->name }}"
+                                 class="rounded-circle"
+                                 style="width: 32px; height: 32px; object-fit: cover;">
+                        @else
+                            <span class="d-flex align-items-center justify-content-center rounded-circle bg-primary-subtle"
+                                  style="width: 32px; height: 32px;">
+                                <iconify-icon icon="iconamoon:profile-circle-duotone" class="text-primary" style="font-size: 22px;"></iconify-icon>
+                            </span>
+                        @endif
                     </a>
                     <div class="dropdown-menu dropdown-menu-end">
                         <h6 class="dropdown-header">{{ auth()->user()->name ?? 'Welcome' }}</h6>
