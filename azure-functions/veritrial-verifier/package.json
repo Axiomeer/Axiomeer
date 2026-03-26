@@ -1,0 +1,13 @@
+{
+  "name": "axiomeer-veritrial-verifier",
+  "version": "1.0.0",
+  "description": "Azure Function for VeriTrail provenance DAG verification and integrity checking",
+  "main": "src/functions/*.js",
+  "scripts": {
+    "start": "func start",
+    "test": "echo \"Tests pending\""
+  },
+  "dependencies": {
+    "@azure/functions": "^4.0.0"
+  }
+}

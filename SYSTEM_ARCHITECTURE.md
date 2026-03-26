@@ -61,12 +61,15 @@ Axiomeer is a governed Retrieval-Augmented Generation (RAG) system purpose-built
 | Backend | Laravel 12, PHP 8.2, XAMPP | Application framework, routing, Blade templates |
 | Database | MySQL 8.0 | Queries, documents, agent runs, audit logs, RAGAS metrics |
 | Auth | Laravel Breeze (Blade) | Authentication, RBAC (admin, analyst, viewer) |
-| Search | Azure AI Search (Free tier) | BM25 keyword search, document indexing, domain filtering |
+| Search | Azure AI Search | Hybrid search (BM25 + semantic ranking), document indexing, domain filtering |
 | LLM | Azure OpenAI (GPT-4.1-mini, GPT-4.1) | Grounded answer generation with source citation |
-| Safety | Azure Content Safety | Harm screening (4 categories), Groundedness API, Prompt Shields |
+| Safety | Azure Content Safety | Harm screening (4 categories), Prompt Shields |
+| Groundedness | Azure AI Foundry Agent Service | Ring 1 groundedness evaluation via deployed agent (threads/runs API) |
 | Doc Parse | Azure Document Intelligence | PDF/image/Office document parsing, table extraction |
-| Speech | Azure Speech Service | Token-based STT for accessibility |
-| Observability | OpenTelemetry (trace_id/span_id) | Distributed tracing across pipeline agents |
+| Provenance | Azure Functions (Node.js) | VeriTrail DAG integrity verification + SHA-256 hash |
+| Web Verify | Bing Search API (RapidAPI) | Cross-reference claims against public web sources |
+| Speech | Browser SpeechRecognition API | Voice input for accessibility |
+| Observability | Application Insights + OpenTelemetry | Distributed tracing, telemetry export |
 | Asset Build | Vite | CSS/JS bundling |
 
 ---
@@ -86,11 +89,11 @@ Stage 1: Content Safety ─────────► Stage 2: Retrieval ──
   │                                  │                              │ Temperature 0.1
   ▼                                  ▼                              ▼
 Stage 4: Verification ──────────────────────────────────────► Stage 5: Persist
-  │ Ring 1: Azure Groundedness API                              │ Save answer + scores
-  │ Ring 2: LettuceDetect NLI (LLM-as-judge)                  │ Persist VeriTrail DAG
-  │ Ring 3: Self-Consistency Confidence                        │ Save citations with verdicts
-  │ Composite: 50% G + 30% L + 20% C                          │ Compute RAGAS metrics
-  │ Safety: Green ≥75% | Yellow ≥45% | Red <45%               │ Create audit log entry
+  │ Ring 1: Foundry Agent Groundedness (threads/runs)           │ Save answer + scores
+  │ Ring 2: LettuceDetect NLI claim decomposition              │ Persist VeriTrail DAG
+  │ Ring 3: H-Neuron self-consistency (N=3 samples)            │ Azure Function DAG verification
+  │ Composite: 50% G + 30% L + 20% C                          │ Save citations with verdicts
+  │ Safety: Green ≥75% | Yellow ≥45% | Red <45%               │ Compute RAGAS metrics + audit log
 ```
 
 ### 3.2 Agent Types
@@ -98,9 +101,9 @@ Stage 4: Verification ───────────────────�
 | Agent | Role | Azure Service | Output |
 |-------|------|--------------|--------|
 | **Content Safety** | Screen input for harmful content + jailbreaks | Azure Content Safety + Prompt Shields | safe/blocked + categories |
-| **Retrieval** | Fetch relevant document chunks | Azure AI Search (BM25) | chunks[] with scores |
+| **Retrieval** | Fetch relevant document chunks | Azure AI Search (hybrid: BM25 + semantic) | chunks[] with scores + captions |
 | **Generation** | Produce cited, grounded answer | Azure OpenAI (model-routed) | answer text + token count |
-| **Verification** | Three-ring hallucination defense + RAGAS | Azure Groundedness + LLM NLI + LLM confidence | safety scores + claim verdicts |
+| **Verification** | Three-ring hallucination defense + RAGAS | Foundry Agent + LLM NLI + Self-Consistency Sampling | safety scores + claim verdicts |
 
 ### 3.3 Model Router
 
@@ -125,30 +128,39 @@ domain ∈ {legal, health}  → +1
 
 ## 4. Three-Ring Hallucination Defense
 
-### Ring 1 — Azure Groundedness Detection API (Weight: 50%)
+### Ring 1 — Azure AI Foundry Groundedness Evaluator (Weight: 50%)
 
-- **Service**: Azure Content Safety — `text:detectGroundedness`
-- **Method**: Semantic comparison of answer against grounding sources
-- **Output**: `ungroundedPercentage` (0-100%), `ungroundedDetails[]` with segment-level spans
-- **Score**: `1.0 - (ungroundedPercentage / 100)`
+- **Service**: Azure AI Foundry Agent Service — deployed `GroundednessEvaluator` agent
+- **API**: OpenAI-compatible Assistants API (`/openai/threads` → messages → runs → poll)
+- **Method**: The agent evaluates the answer against source documents using Microsoft's GroundednessEvaluator rubric (1–5 scale), matching the `azure-ai-evaluation` SDK's prompt template
+- **Scoring rubric**: 5 = Fully grounded, 4 = Mostly grounded, 3 = Vague/incomplete, 2 = Incorrect info, 1 = Completely unrelated
+- **Output**: Structured `<S0>` chain-of-thought reasoning, `<S1>` explanation, `<S2>` integer score
+- **Score**: Normalized to 0.0–1.0 (`raw_score / 5.0`)
 - **Auto-correction**: Yellow-level answers get ungrounded segments annotated as review notices
 
-### Ring 2 — LettuceDetect NLI Classifier (Weight: 30%)
+### Ring 2 — LettuceDetect NLI Claim Decomposition (Weight: 30%)
 
-- **Method**: LLM-as-NLI-judge — decomposes answer into individual factual claims, then classifies each as supported/unsupported by the retrieved context
+- **Research basis**: Inspired by the LettuceDetect paper (KRR-Oxford), which uses a ModernBERT token classifier trained on RAGTruth corpus for token-level hallucination detection
+- **Method**: LLM-as-NLI-judge — decomposes answer into individual factual claims, then classifies each as supported/unsupported by the retrieved context (sentence-level NLI approximation since ModernBERT cannot run natively in PHP)
 - **Claim decomposition**: Extracts atomic factual statements from the answer
 - **Per-claim verdict**: `supported` (with source_idx) or `unsupported`
 - **Score**: `supported_claims / total_claims`
 - **Output**: Claim array with verdicts, confidence scores, and source attribution
 - **VeriTrail integration**: Each claim becomes a DAG node with backward edges to its source
 
-### Ring 3 — H-Neuron Confidence Proxy (Weight: 20%)
+### Ring 3 — H-Neuron Self-Consistency Proxy (Weight: 20%)
 
-- **Method**: Self-consistency via verbalized confidence estimation
-- **Process**: LLM evaluates its own answer against sources, outputs calibrated confidence score
-- **Uncertainty factors**: Identifies specific gaps in source coverage
-- **Score**: 0.0-1.0 calibrated confidence
-- **Fallback**: 0.5 (neutral) on API failure
+- **Research basis**: Since H-Neuron requires access to internal model activations (unavailable via API), we implement the self-consistency sampling proxy (Wang et al., 2023)
+- **Method**: Generate N=3 alternative answers at temperature=0.7, then measure claim-level agreement across all samples
+- **Process**:
+  1. Generate 3 additional answers with high temperature for the same query + context
+  2. Decompose the original answer into atomic claims
+  3. For each claim, check how many alternative samples contain a semantically equivalent claim
+  4. `agreement_ratio = present_in_samples / total_samples`
+  5. Claims with high agreement → model is confident; low agreement → hallucination risk
+- **Score**: Average of all claim agreement ratios (0.0–1.0)
+- **Output**: Per-claim stability analysis, uncertainty factors, stable/unstable claim counts
+- **Fallback**: 0.5 (neutral) if sample generation fails
 
 ### Composite Safety Score
 
@@ -214,6 +226,19 @@ VeriTrail provides a directed acyclic graph (DAG) tracing every step of the pipe
 - **Three-ring nodes**: Each ring is a separate node with its own score
 - **Immutable trace**: trace_id + span_id for distributed tracing and audit compliance
 
+### Azure Function — DAG Integrity Verification
+
+Each VeriTrail DAG is verified by an **Azure Function** (`axiomeer-veritrial.azurewebsites.net`) deployed on Azure Functions (Node.js, consumption plan). The function performs:
+
+1. **Structural validation**: Verifies all required pipeline nodes exist (input, safety_gate, retrieval, generation, output)
+2. **Acyclicity check**: Kahn's algorithm topological sort — ensures no circular dependencies in the DAG
+3. **Claim trace completeness**: Every claim node must have a backward edge to a source or generation node
+4. **Safety gate verification**: Confirms the safety gate node reports `passed: true`
+5. **Three-ring coverage**: All three verification ring nodes must be present with scores
+6. **SHA-256 integrity hash**: Computes a tamper-evident hash over the canonical node/edge representation
+
+The verification result (including `integrity_hash`, `checks_passed`, and `timestamp`) is embedded into the DAG's `verification` field before persistence.
+
 ---
 
 ## 6. RAGAS Evaluation Framework
@@ -236,9 +261,11 @@ All metrics are persisted in the `evaluation_metrics` table per query and displa
 
 ### Azure AI Search Index (`axiomeer-knowledge`)
 
-- **Type**: BM25 keyword search (free tier)
-- **Fields**: id, title, content, page_number, chunk_index, domain, document_id
+- **Type**: Hybrid search — BM25 keyword + semantic ranking with extractive captions and answers
+- **Semantic configuration**: `axiomeer-semantic` — prioritizes `content` field with `title` as title field
+- **Fields**: id, title, content, page_number, chunk_index, domain, document_id, author, description
 - **Domain filtering**: `domain eq 'legal'` filter on search queries
+- **Fallback**: Automatic fallback to keyword-only BM25 search if semantic ranking is unavailable
 - **Indexing**: Documents parsed by Document Intelligence → chunked (~500 chars) → pushed via mergeOrUpload
 
 ### Document Processing Pipeline
@@ -285,15 +312,14 @@ Upload → Azure Document Intelligence (prebuilt-layout)
 
 | Azure Service | Feature Used | RAI Role |
 |--------------|-------------|----------|
-| **Azure OpenAI** | GPT-4.1-mini + GPT-4.1 chat completions | Grounded generation with citations |
-| **Azure AI Search** | BM25 keyword search, document indexing | Knowledge retrieval with domain scoping |
+| **Azure OpenAI** | GPT-4.1-mini + GPT-4.1 chat completions | Grounded generation, NLI claim verification (Ring 2), self-consistency sampling (Ring 3) |
+| **Azure AI Foundry Agent Service** | Deployed GroundednessEvaluator agent (Assistants API) | Ring 1 groundedness evaluation via threads/runs |
+| **Azure AI Search** | Hybrid search (BM25 + semantic ranking), document indexing | Knowledge retrieval with domain scoping |
 | **Azure Content Safety** | Text analysis (4 categories) | Input/output harm screening |
-| **Azure Content Safety** | Groundedness Detection API | Ring 1 hallucination defense |
 | **Azure Content Safety** | Prompt Shields API | Jailbreak + injection detection |
 | **Azure Document Intelligence** | prebuilt-layout model | Document parsing + table extraction |
-| **Azure Speech** | Token-based STT | Accessibility (voice input) |
-| **Azure Blob Storage** | Document file storage | Raw document persistence |
-| **Application Insights** | Connection string telemetry | Observability + monitoring |
+| **Azure Functions** | Node.js HTTP trigger (consumption plan) | VeriTrail DAG integrity verification + SHA-256 hash |
+| **Application Insights** | Connection string telemetry | Observability, pipeline trace export |
 
 ---
 
@@ -344,13 +370,16 @@ Upload → Azure Document Intelligence (prebuilt-layout)
 | `GET /evaluation` | EvaluationController | RAGAS metrics (admin/analyst) |
 | `GET /settings` | SettingsController | Service health (admin) |
 | `GET /agents` | AgentPipelineController | Agent monitoring (admin) |
-| `GET /responsible-ai` | (static view) | Transparency page |
+| `GET /responsible-ai` | ResponsibleAiController | Data-driven RAI governance dashboard |
+| `GET /safety-test` | SafetyTestController | Synthetic adversarial test runner |
+| `POST /safety-test/run` | SafetyTestController@run | Execute adversarial test batch |
 
 ### API Routes
 
 | Route | Controller | Purpose |
 |-------|-----------|---------|
 | `GET /api/speech-token` | SpeechTokenController | Azure Speech token for STT |
+| `POST /api/web-search` | WebSearchController | Bing Search API cross-reference for Web Verify |
 
 ---
 
@@ -367,5 +396,5 @@ Upload → Azure Document Intelligence (prebuilt-layout)
 
 ---
 
-*Document version: 2.0 | Last updated: 2026-03-24*
+*Document version: 3.0 | Last updated: 2026-03-26*
 *Axiomeer — Microsoft Innovate Challenge 2026*

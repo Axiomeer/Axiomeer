@@ -3,225 +3,206 @@
 @section('title', 'Ask Question')
 @section('page-title', 'Ask Question')
 
+@push('styles')
+<style>
+    .conversation-item { transition: all 0.2s ease; cursor: pointer; }
+    .conversation-item:hover { background: var(--bs-light); transform: translateX(4px); }
+    .conversation-item.active { border-left: 3px solid var(--bs-primary) !important; background: rgba(var(--bs-primary-rgb), 0.05); }
+    .new-chat-btn { border: 2px dashed var(--bs-border-color); transition: all 0.2s; }
+    .new-chat-btn:hover { border-color: var(--bs-primary); background: rgba(var(--bs-primary-rgb), 0.05); }
+</style>
+@endpush
+
 @section('content')
 
 <div class="row">
-    {{-- Ask a Question Panel --}}
-    <div class="col-lg-8">
+    {{-- Conversation Sidebar --}}
+    <div class="col-lg-4">
+        {{-- New Conversation --}}
+        <div class="card new-chat-btn mb-2" data-bs-toggle="modal" data-bs-target="#newChatModal">
+            <div class="card-body py-3 text-center">
+                <iconify-icon icon="iconamoon:sign-plus-duotone" class="fs-20 text-primary me-1"></iconify-icon>
+                <span class="fw-semibold text-primary">New Conversation</span>
+            </div>
+        </div>
+
+        {{-- Search --}}
+        <div class="card mb-2">
+            <div class="card-body py-2">
+                <form method="GET" action="{{ route('query.index') }}">
+                    <div class="input-group input-group-sm">
+                        <span class="input-group-text bg-transparent border-end-0">
+                            <iconify-icon icon="iconamoon:search-duotone" class="text-muted"></iconify-icon>
+                        </span>
+                        <input type="text" class="form-control border-start-0" name="search"
+                               value="{{ request('search') }}" placeholder="Search conversations...">
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        {{-- Conversation List --}}
         <div class="card">
-            <div class="card-header">
-                <div class="d-flex align-items-center gap-2">
-                    <div class="avatar-sm rounded bg-primary-subtle d-flex align-items-center justify-content-center">
-                        <iconify-icon icon="iconamoon:comment-duotone" class="fs-20 text-primary"></iconify-icon>
+            <div class="card-header py-2 d-flex justify-content-between align-items-center">
+                <h6 class="card-title mb-0 fs-13">Conversations</h6>
+                <span class="badge bg-primary-subtle text-primary rounded-pill fs-10">{{ $conversations->total() }}</span>
+            </div>
+            <div class="card-body p-0" style="max-height: 60vh; overflow-y: auto;">
+                @forelse ($conversations as $conv)
+                    @php $lastQuery = $conv->queries->first(); @endphp
+                    <div class="conversation-item border-bottom px-3 py-2"
+                         onclick="window.location='{{ $lastQuery ? route('query.show', $lastQuery) : '#' }}'">
+                        <div class="d-flex align-items-start gap-2">
+                            <div class="avatar-xs rounded-circle bg-{{ $conv->domain->color ?? 'primary' }}-subtle d-flex align-items-center justify-content-center flex-shrink-0 mt-1">
+                                <iconify-icon icon="{{ $conv->domain->icon ?? 'iconamoon:comment-duotone' }}" class="text-{{ $conv->domain->color ?? 'primary' }} fs-14"></iconify-icon>
+                            </div>
+                            <div class="flex-grow-1 min-w-0">
+                                <div class="fw-semibold fs-13 text-truncate">
+                                    {{ $conv->title ?? 'Untitled Conversation' }}
+                                </div>
+                                @if ($lastQuery)
+                                    <div class="text-muted fs-11 text-truncate">{{ Str::limit($lastQuery->question, 60) }}</div>
+                                @endif
+                                <div class="d-flex align-items-center gap-2 mt-1">
+                                    <span class="badge bg-{{ $conv->domain->color ?? 'secondary' }}-subtle text-{{ $conv->domain->color ?? 'secondary' }} fs-10">{{ $conv->domain->display_name }}</span>
+                                    <span class="text-muted fs-10">{{ $conv->last_activity_at?->diffForHumans() ?? $conv->created_at->diffForHumans() }}</span>
+                                </div>
+                            </div>
+                        </div>
                     </div>
-                    <div>
-                        <h5 class="card-title mb-0">Ask a Question</h5>
-                        <p class="text-muted fs-12 mb-0">Get grounded, cited answers from your knowledge base</p>
+                @empty
+                    <div class="text-center py-4">
+                        <iconify-icon icon="iconamoon:comment-dots-duotone" class="fs-36 text-muted d-block mb-2"></iconify-icon>
+                        <h6 class="fw-semibold mb-1">No conversations yet</h6>
+                        <p class="text-muted fs-13 mb-0">Start a new conversation above</p>
                     </div>
+                @endforelse
+            </div>
+            @if ($conversations->hasPages())
+                <div class="card-footer py-2">
+                    {{ $conversations->links() }}
+                </div>
+            @endif
+        </div>
+
+        {{-- Orphan queries (pre-conversation) --}}
+        @if ($orphanQueries->count())
+            <div class="card">
+                <div class="card-header py-2">
+                    <h6 class="card-title mb-0 fs-13">Previous Queries</h6>
+                </div>
+                <div class="card-body p-0">
+                    @foreach ($orphanQueries as $q)
+                        <div class="conversation-item border-bottom px-3 py-2"
+                             onclick="window.location='{{ route('query.show', $q) }}'">
+                            <div class="text-truncate fs-13">{{ Str::limit($q->question, 50) }}</div>
+                            <div class="d-flex align-items-center gap-2 mt-1">
+                                <span class="badge bg-{{ $q->domain->color ?? 'secondary' }}-subtle text-{{ $q->domain->color ?? 'secondary' }} fs-10">{{ $q->domain->display_name ?? 'N/A' }}</span>
+                                @if ($q->safety_level)
+                                    @php $safetyColors = ['green' => 'success', 'yellow' => 'warning', 'red' => 'danger']; @endphp
+                                    <span class="badge bg-{{ $safetyColors[$q->safety_level] ?? 'secondary' }}-subtle text-{{ $safetyColors[$q->safety_level] ?? 'secondary' }} fs-10">{{ ucfirst($q->safety_level) }}</span>
+                                @endif
+                                <span class="text-muted fs-10">{{ $q->created_at->diffForHumans() }}</span>
+                            </div>
+                        </div>
+                    @endforeach
                 </div>
             </div>
-            <div class="card-body">
-                <form method="POST" action="{{ route('query.store') }}">
-                    @csrf
+        @endif
+    </div>
 
+    {{-- Main Content --}}
+    <div class="col-lg-8">
+        {{-- Welcome / Getting Started --}}
+        <div class="card">
+            <div class="card-body text-center py-5">
+                <div class="avatar-lg rounded-circle bg-primary-subtle d-flex align-items-center justify-content-center mx-auto mb-3">
+                    <iconify-icon icon="iconamoon:lightning-2-duotone" class="fs-36 text-primary"></iconify-icon>
+                </div>
+                <h4 class="fw-bold mb-2">Ask Axiomeer</h4>
+                <p class="text-muted mb-4 mx-auto" style="max-width: 480px;">
+                    Get grounded, cited answers from your knowledge base. Every response is verified through our three-ring hallucination defense.
+                </p>
+                <button class="btn btn-primary btn-lg" data-bs-toggle="modal" data-bs-target="#newChatModal">
+                    <iconify-icon icon="iconamoon:sign-plus-duotone" class="me-1"></iconify-icon>
+                    Start New Conversation
+                </button>
+
+                <div class="row mt-4 g-3 text-start mx-auto" style="max-width: 600px;">
+                    @php
+                        $steps = [
+                            ['icon' => 'shield-yes-duotone', 'color' => 'warning', 'title' => 'Safety Screen', 'desc' => 'Input screened for harmful content'],
+                            ['icon' => 'search-duotone', 'color' => 'info', 'title' => 'Retrieve', 'desc' => 'Relevant docs fetched from Azure AI Search'],
+                            ['icon' => 'lightning-2-duotone', 'color' => 'primary', 'title' => 'Generate', 'desc' => 'Grounded answer with inline citations'],
+                            ['icon' => 'check-circle-1-duotone', 'color' => 'success', 'title' => 'Verify', 'desc' => 'Three-ring hallucination defense'],
+                        ];
+                    @endphp
+                    @foreach ($steps as $step)
+                        <div class="col-6">
+                            <div class="d-flex gap-2">
+                                <div class="avatar-xs rounded bg-{{ $step['color'] }}-subtle d-flex align-items-center justify-content-center flex-shrink-0">
+                                    <iconify-icon icon="iconamoon:{{ $step['icon'] }}" class="text-{{ $step['color'] }}"></iconify-icon>
+                                </div>
+                                <div>
+                                    <p class="fw-medium mb-0 fs-13">{{ $step['title'] }}</p>
+                                    <p class="text-muted fs-11 mb-0">{{ $step['desc'] }}</p>
+                                </div>
+                            </div>
+                        </div>
+                    @endforeach
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{{-- New Chat Modal --}}
+<div class="modal fade" id="newChatModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <form method="POST" action="{{ route('query.store') }}" id="newChatForm">
+                @csrf
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <iconify-icon icon="iconamoon:comment-duotone" class="text-primary me-1"></iconify-icon>
+                        New Conversation
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
                     {{-- Domain Selector --}}
                     <div class="mb-3">
-                        <label for="domain_id" class="form-label fw-medium">Domain</label>
+                        <label class="form-label fw-medium">Domain</label>
                         <div class="d-flex flex-wrap gap-2">
                             @foreach ($domains as $domain)
                                 <div>
                                     <input type="radio" class="btn-check" name="domain_id"
-                                           id="domain_{{ $domain->id }}" value="{{ $domain->id }}"
-                                           {{ old('domain_id', $domains->first()->id ?? '') == $domain->id ? 'checked' : '' }}>
-                                    <label class="btn btn-outline-{{ $domain->color ?? 'primary' }} btn-sm" for="domain_{{ $domain->id }}">
+                                           id="modal_domain_{{ $domain->id }}" value="{{ $domain->id }}"
+                                           {{ $loop->first ? 'checked' : '' }}>
+                                    <label class="btn btn-outline-{{ $domain->color ?? 'primary' }} btn-sm" for="modal_domain_{{ $domain->id }}">
                                         <iconify-icon icon="{{ $domain->icon }}" class="me-1"></iconify-icon>
                                         {{ $domain->display_name }}
                                     </label>
                                 </div>
                             @endforeach
                         </div>
-                        @error('domain_id')
-                            <div class="text-danger fs-12 mt-1">{{ $message }}</div>
-                        @enderror
                     </div>
 
-                    {{-- Question Input --}}
+                    {{-- Question --}}
                     <div class="mb-3">
-                        <label for="question" class="form-label fw-medium">Your Question</label>
-                        <textarea class="form-control @error('question') is-invalid @enderror"
-                                  id="question" name="question" rows="4"
-                                  placeholder="e.g. What are the key requirements for GDPR data processing agreements?">{{ old('question') }}</textarea>
-                        @error('question')
-                            <div class="invalid-feedback">{{ $message }}</div>
-                        @enderror
-                        <div class="form-text">Ask a specific, compliance-related question. The system will retrieve relevant documents, generate a grounded answer, and verify it against hallucination defenses.</div>
-                    </div>
-
-                    {{-- Submit --}}
-                    <div class="d-flex gap-2 align-items-center">
-                        <button type="submit" class="btn btn-primary">
-                            <iconify-icon icon="iconamoon:send-duotone" class="me-1"></iconify-icon>
-                            Submit Question
-                        </button>
-                        <button type="button" class="btn btn-outline-secondary" id="mic-btn" title="Speak your question">
-                            <iconify-icon icon="iconamoon:microphone-duotone" id="mic-icon"></iconify-icon>
-                            <span id="mic-label" class="ms-1 d-none d-md-inline">Voice</span>
-                        </button>
-                        <span id="mic-status" class="text-muted fs-12 d-none">Listening...</span>
-                    </div>
-                </form>
-            </div>
-        </div>
-
-        {{-- Query History --}}
-        <div class="card">
-            <div class="card-header d-flex align-items-center justify-content-between">
-                <h5 class="card-title mb-0">Your Query History</h5>
-                <span class="text-muted fs-12">{{ $queries->total() }} total</span>
-            </div>
-            <div class="card-body p-0">
-                <div class="table-responsive">
-                    <table class="table table-hover mb-0">
-                        <thead>
-                            <tr>
-                                <th>Question</th>
-                                <th>Domain</th>
-                                <th>Safety</th>
-                                <th>Status</th>
-                                <th style="width: 100px;">Date</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @forelse ($queries as $q)
-                                <tr class="cursor-pointer" onclick="window.location='{{ route('query.show', $q) }}'">
-                                    <td>{{ Str::limit($q->question, 60) }}</td>
-                                    <td>
-                                        <span class="badge bg-{{ $q->domain->color ?? 'secondary' }}-subtle text-{{ $q->domain->color ?? 'secondary' }}">
-                                            {{ $q->domain->display_name ?? 'N/A' }}
-                                        </span>
-                                    </td>
-                                    <td>
-                                        @if ($q->safety_level)
-                                            @php
-                                                $safetyColors = ['green' => 'success', 'yellow' => 'warning', 'red' => 'danger'];
-                                            @endphp
-                                            <span class="badge bg-{{ $safetyColors[$q->safety_level] ?? 'secondary' }}-subtle text-{{ $safetyColors[$q->safety_level] ?? 'secondary' }}">
-                                                {{ ucfirst($q->safety_level) }}
-                                            </span>
-                                        @else
-                                            <span class="text-muted fs-12">&mdash;</span>
-                                        @endif
-                                    </td>
-                                    <td>
-                                        @php
-                                            $sc = ['pending' => 'warning', 'processing' => 'info', 'completed' => 'success', 'failed' => 'danger'];
-                                        @endphp
-                                        <span class="badge bg-{{ $sc[$q->status] ?? 'secondary' }}-subtle text-{{ $sc[$q->status] ?? 'secondary' }}">
-                                            {{ ucfirst($q->status) }}
-                                        </span>
-                                    </td>
-                                    <td class="text-muted fs-12">{{ $q->created_at->format('M d') }}</td>
-                                </tr>
-                            @empty
-                                <tr>
-                                    <td colspan="5">
-                                        <div class="text-center py-4">
-                                            <iconify-icon icon="iconamoon:comment-dots-duotone" class="fs-36 text-muted d-block mb-2"></iconify-icon>
-                                            <h6 class="fw-semibold mb-1">No queries yet</h6>
-                                            <p class="text-muted fs-13 mb-0">Ask your first question above to get started.</p>
-                                        </div>
-                                    </td>
-                                </tr>
-                            @endforelse
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-
-        @if ($queries->hasPages())
-            <div class="d-flex justify-content-center">
-                {{ $queries->links() }}
-            </div>
-        @endif
-    </div>
-
-    {{-- Right Sidebar --}}
-    <div class="col-lg-4">
-        {{-- How It Works --}}
-        <div class="card">
-            <div class="card-header">
-                <h5 class="card-title mb-0">
-                    <iconify-icon icon="iconamoon:lightning-2-duotone" class="text-warning me-1"></iconify-icon>
-                    How It Works
-                </h5>
-            </div>
-            <div class="card-body">
-                <div class="d-flex flex-column gap-3">
-                    <div class="d-flex gap-2">
-                        <div class="avatar-xs rounded-circle bg-primary-subtle d-flex align-items-center justify-content-center flex-shrink-0">
-                            <span class="fw-bold text-primary fs-12">1</span>
-                        </div>
-                        <div>
-                            <p class="fw-medium mb-0 fs-14">Retrieve</p>
-                            <p class="text-muted fs-12 mb-0">Relevant document chunks are retrieved from Azure AI Search</p>
-                        </div>
-                    </div>
-                    <div class="d-flex gap-2">
-                        <div class="avatar-xs rounded-circle bg-info-subtle d-flex align-items-center justify-content-center flex-shrink-0">
-                            <span class="fw-bold text-info fs-12">2</span>
-                        </div>
-                        <div>
-                            <p class="fw-medium mb-0 fs-14">Generate</p>
-                            <p class="text-muted fs-12 mb-0">Azure OpenAI generates a grounded answer with citations</p>
-                        </div>
-                    </div>
-                    <div class="d-flex gap-2">
-                        <div class="avatar-xs rounded-circle bg-warning-subtle d-flex align-items-center justify-content-center flex-shrink-0">
-                            <span class="fw-bold text-warning fs-12">3</span>
-                        </div>
-                        <div>
-                            <p class="fw-medium mb-0 fs-14">Verify</p>
-                            <p class="text-muted fs-12 mb-0">Three-ring hallucination defense checks faithfulness</p>
-                        </div>
-                    </div>
-                    <div class="d-flex gap-2">
-                        <div class="avatar-xs rounded-circle bg-success-subtle d-flex align-items-center justify-content-center flex-shrink-0">
-                            <span class="fw-bold text-success fs-12">4</span>
-                        </div>
-                        <div>
-                            <p class="fw-medium mb-0 fs-14">Deliver</p>
-                            <p class="text-muted fs-12 mb-0">Answer is returned with provenance trail and safety score</p>
-                        </div>
+                        <label for="modal_question" class="form-label fw-medium">Your Question</label>
+                        <textarea class="form-control" id="modal_question" name="question" rows="3"
+                                  placeholder="e.g. What are the key requirements for GDPR data processing agreements?" required></textarea>
                     </div>
                 </div>
-            </div>
-        </div>
-
-        {{-- Safety Legend --}}
-        <div class="card">
-            <div class="card-header">
-                <h5 class="card-title mb-0">
-                    <iconify-icon icon="iconamoon:shield-yes-duotone" class="text-danger me-1"></iconify-icon>
-                    Safety Levels
-                </h5>
-            </div>
-            <div class="card-body">
-                <div class="d-flex flex-column gap-2">
-                    <div class="d-flex align-items-center gap-2">
-                        <span class="badge bg-success">Green</span>
-                        <span class="fs-13 text-muted">High confidence, fully grounded</span>
-                    </div>
-                    <div class="d-flex align-items-center gap-2">
-                        <span class="badge bg-warning">Yellow</span>
-                        <span class="fs-13 text-muted">Partial grounding, review recommended</span>
-                    </div>
-                    <div class="d-flex align-items-center gap-2">
-                        <span class="badge bg-danger">Red</span>
-                        <span class="fs-13 text-muted">Hallucination detected, answer blocked</span>
-                    </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">
+                        <iconify-icon icon="iconamoon:send-duotone" class="me-1"></iconify-icon>
+                        Send
+                    </button>
                 </div>
-            </div>
+            </form>
         </div>
     </div>
 </div>
@@ -235,36 +216,19 @@
                 <h5 class="fw-semibold mb-1">Processing Your Query</h5>
                 <p class="text-muted fs-13 mb-4">Running the multi-agent RAG pipeline...</p>
 
-                {{-- Pipeline Steps --}}
                 <div class="d-flex align-items-center justify-content-between position-relative mb-4 px-2">
                     <div class="position-absolute" style="top: 20px; left: 50px; right: 50px; height: 3px; background: var(--bs-border-color); z-index: 0;">
                         <div id="pipeline-progress-line" style="height: 100%; width: 0%; background: var(--bs-primary); transition: width 0.8s ease;"></div>
                     </div>
-
-                    <div class="text-center position-relative" style="z-index: 1; flex: 1;" id="step-safety">
-                        <div class="rounded-circle d-flex align-items-center justify-content-center mx-auto mb-1 border border-2 border-secondary bg-body" style="width: 40px; height: 40px; transition: all 0.4s ease;" id="step-safety-circle">
-                            <i class="bx bx-time-five text-secondary fs-18" id="step-safety-icon"></i>
+                    @php $pSteps = ['safety' => 'Safety', 'retrieval' => 'Retrieval', 'generation' => 'Generation', 'verification' => 'Verification']; @endphp
+                    @foreach ($pSteps as $sid => $slabel)
+                        <div class="text-center position-relative" style="z-index: 1; flex: 1;">
+                            <div class="rounded-circle d-flex align-items-center justify-content-center mx-auto mb-1 border border-2 border-secondary bg-body" style="width: 40px; height: 40px; transition: all 0.4s ease;" id="step-{{ $sid }}-circle">
+                                <i class="bx bx-time-five text-secondary fs-18" id="step-{{ $sid }}-icon"></i>
+                            </div>
+                            <div class="fw-semibold fs-12">{{ $slabel }}</div>
                         </div>
-                        <div class="fw-semibold fs-12">Safety</div>
-                    </div>
-                    <div class="text-center position-relative" style="z-index: 1; flex: 1;" id="step-retrieval">
-                        <div class="rounded-circle d-flex align-items-center justify-content-center mx-auto mb-1 border border-2 border-secondary bg-body" style="width: 40px; height: 40px; transition: all 0.4s ease;" id="step-retrieval-circle">
-                            <i class="bx bx-time-five text-secondary fs-18" id="step-retrieval-icon"></i>
-                        </div>
-                        <div class="fw-semibold fs-12">Retrieval</div>
-                    </div>
-                    <div class="text-center position-relative" style="z-index: 1; flex: 1;" id="step-generation">
-                        <div class="rounded-circle d-flex align-items-center justify-content-center mx-auto mb-1 border border-2 border-secondary bg-body" style="width: 40px; height: 40px; transition: all 0.4s ease;" id="step-generation-circle">
-                            <i class="bx bx-time-five text-secondary fs-18" id="step-generation-icon"></i>
-                        </div>
-                        <div class="fw-semibold fs-12">Generation</div>
-                    </div>
-                    <div class="text-center position-relative" style="z-index: 1; flex: 1;" id="step-verification">
-                        <div class="rounded-circle d-flex align-items-center justify-content-center mx-auto mb-1 border border-2 border-secondary bg-body" style="width: 40px; height: 40px; transition: all 0.4s ease;" id="step-verification-circle">
-                            <i class="bx bx-time-five text-secondary fs-18" id="step-verification-icon"></i>
-                        </div>
-                        <div class="fw-semibold fs-12">Verification</div>
-                    </div>
+                    @endforeach
                 </div>
 
                 <div id="pipeline-status-text" class="text-muted fs-13">
@@ -280,133 +244,33 @@
 @push('scripts')
 <script>
 document.addEventListener('DOMContentLoaded', function () {
-    const micBtn = document.getElementById('mic-btn');
-    const micIcon = document.getElementById('mic-icon');
-    const micStatus = document.getElementById('mic-status');
-    const textarea = document.getElementById('question');
-
-    if (!micBtn || !textarea) return;
-
-    let recognizing = false;
-    let recognition = null;
-
-    // Try Web Speech API first (works in Chrome/Edge)
-    if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
-        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-        recognition = new SpeechRecognition();
-        recognition.continuous = true;
-        recognition.interimResults = true;
-        recognition.lang = 'en-US';
-
-        recognition.onstart = function () {
-            recognizing = true;
-            micBtn.classList.remove('btn-outline-secondary');
-            micBtn.classList.add('btn-danger');
-            micIcon.setAttribute('icon', 'iconamoon:microphone-duotone');
-            micStatus.classList.remove('d-none');
-            micStatus.textContent = 'Listening...';
-        };
-
-        recognition.onresult = function (event) {
-            let finalTranscript = '';
-            let interimTranscript = '';
-            for (let i = event.resultIndex; i < event.results.length; i++) {
-                if (event.results[i].isFinal) {
-                    finalTranscript += event.results[i][0].transcript;
-                } else {
-                    interimTranscript += event.results[i][0].transcript;
-                }
-            }
-            if (finalTranscript) {
-                textarea.value += finalTranscript;
-            }
-            if (interimTranscript) {
-                micStatus.textContent = interimTranscript;
-            }
-        };
-
-        recognition.onerror = function (event) {
-            console.error('Speech recognition error:', event.error);
-            stopRecognition();
-            if (event.error === 'not-allowed') {
-                micStatus.textContent = 'Microphone access denied';
-                micStatus.classList.remove('d-none');
-            }
-        };
-
-        recognition.onend = function () {
-            stopRecognition();
-        };
-
-        micBtn.addEventListener('click', function () {
-            if (recognizing) {
-                recognition.stop();
-            } else {
-                recognition.start();
-            }
-        });
-    } else {
-        // Fallback: use Azure Speech token endpoint
-        micBtn.addEventListener('click', async function () {
-            if (recognizing) return;
-
-            try {
-                micStatus.classList.remove('d-none');
-                micStatus.textContent = 'Connecting to Azure Speech...';
-                const resp = await fetch('{{ route("api.speech-token") }}');
-                const data = await resp.json();
-
-                if (data.error) {
-                    micStatus.textContent = 'Speech not available: ' + data.error;
-                    return;
-                }
-
-                micStatus.textContent = 'Azure Speech token obtained. Use a browser with Web Speech API (Chrome/Edge) for best results.';
-            } catch (e) {
-                micStatus.textContent = 'Speech service unavailable';
-            }
-        });
-    }
-
-    function stopRecognition() {
-        recognizing = false;
-        micBtn.classList.remove('btn-danger');
-        micBtn.classList.add('btn-outline-secondary');
-        micStatus.classList.add('d-none');
-    }
-
     // Pipeline loading overlay on form submit
-    const form = document.querySelector('form[action*="query"]');
-    if (form) {
+    document.querySelectorAll('form[action*="query"]').forEach(function (form) {
         form.addEventListener('submit', function () {
-            const overlay = document.getElementById('pipeline-overlay');
+            var overlay = document.getElementById('pipeline-overlay');
             if (!overlay) return;
             overlay.classList.remove('d-none');
 
-            const steps = [
+            var steps = [
                 { id: 'safety', label: 'Screening content safety...', delay: 800 },
-                { id: 'retrieval', label: 'Retrieving relevant documents from Azure AI Search...', delay: 3000 },
-                { id: 'generation', label: 'Generating grounded answer with Azure OpenAI...', delay: 6500 },
-                { id: 'verification', label: 'Running three-ring hallucination defense...', delay: 10000 },
+                { id: 'retrieval', label: 'Retrieving relevant documents...', delay: 3000 },
+                { id: 'generation', label: 'Generating grounded answer...', delay: 6500 },
+                { id: 'verification', label: 'Running hallucination defense...', delay: 10000 },
             ];
 
-            const progressLine = document.getElementById('pipeline-progress-line');
-            const statusText = document.getElementById('pipeline-status-text');
+            var progressLine = document.getElementById('pipeline-progress-line');
+            var statusText = document.getElementById('pipeline-status-text');
 
             steps.forEach(function (step, i) {
                 setTimeout(function () {
-                    // Activate this step
-                    const circle = document.getElementById('step-' + step.id + '-circle');
-                    const icon = document.getElementById('step-' + step.id + '-icon');
-
+                    var circle = document.getElementById('step-' + step.id + '-circle');
+                    var icon = document.getElementById('step-' + step.id + '-icon');
                     circle.classList.remove('border-secondary', 'bg-body');
                     circle.classList.add('border-primary', 'bg-primary');
                     icon.className = 'bx bx-loader-alt bx-spin text-white fs-18';
-
                     statusText.innerHTML = '<i class="bx bx-loader-alt bx-spin me-1"></i> ' + step.label;
                     progressLine.style.width = ((i + 1) * 25) + '%';
 
-                    // Mark previous step as completed
                     if (i > 0) {
                         var prev = steps[i - 1];
                         var prevCircle = document.getElementById('step-' + prev.id + '-circle');
@@ -418,7 +282,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 }, step.delay);
             });
         });
-    }
+    });
 });
 </script>
 @endpush

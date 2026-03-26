@@ -108,6 +108,15 @@
                     <span class="nav-text">Agent Pipeline</span>
                 </a>
             </li>
+
+            <li class="nav-item">
+                <a class="nav-link" href="{{ url('/safety-test') }}">
+                    <span class="nav-icon">
+                        <iconify-icon icon="iconamoon:shield-yes-duotone"></iconify-icon>
+                    </span>
+                    <span class="nav-text">Safety Tests</span>
+                </a>
+            </li>
         </ul>
     </div>
 </div>

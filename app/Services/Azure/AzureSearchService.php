@@ -21,7 +21,8 @@ class AzureSearchService
     }
 
     /**
-     * Perform a keyword search against Azure AI Search.
+     * Perform a hybrid search (keyword BM25 + semantic ranking) against Azure AI Search.
+     * Falls back to keyword-only if semantic ranking is unavailable.
      */
     public function search(string $query, string $domainSlug = null, int $topK = 5): array
     {
@@ -31,11 +32,16 @@ class AzureSearchService
 
         $url = "{$this->endpoint}/indexes/{$this->index}/docs/search?api-version={$this->apiVersion}";
 
+        $semanticConfig = config('azure.search.semantic_config', 'axiomeer-semantic');
+
         $body = [
             'search' => $query,
-            'queryType' => 'simple',
+            'queryType' => 'semantic',
+            'semanticConfiguration' => $semanticConfig,
             'top' => $topK,
-            'select' => 'id,title,content,page_number,chunk_index,domain,document_id',
+            'select' => 'id,title,content,page_number,chunk_index,domain,document_id,author,description',
+            'captions' => 'extractive',
+            'answers' => 'extractive|count-1',
         ];
 
         if ($domainSlug) {
@@ -50,6 +56,12 @@ class AzureSearchService
         ])->timeout(30)->post($url, $body);
 
         $latencyMs = (int) ((microtime(true) - $startTime) * 1000);
+
+        // Fall back to simple keyword search if semantic fails
+        if ($response->failed() && $response->status() !== 404) {
+            Log::info('Semantic search failed, falling back to keyword search', ['status' => $response->status()]);
+            return $this->keywordSearch($query, $domainSlug, $topK);
+        }
 
         if ($response->failed()) {
             Log::error('Azure AI Search request failed', [
@@ -75,6 +87,71 @@ class AzureSearchService
                 'chunk_index' => $result['chunk_index'] ?? null,
                 'domain' => $result['domain'] ?? null,
                 'document_id' => $result['document_id'] ?? null,
+                'author' => $result['author'] ?? null,
+                'score' => $result['@search.score'] ?? 0,
+                'reranker_score' => $result['@search.rerankerScore'] ?? null,
+                'captions' => array_map(function ($c) {
+                    return $c['text'] ?? '';
+                }, $result['@search.captions'] ?? []),
+            ];
+        }, $results);
+
+        return [
+            'success' => true,
+            'chunks' => $chunks,
+            'count' => count($chunks),
+            'latency_ms' => $latencyMs,
+            'search_mode' => 'semantic',
+        ];
+    }
+
+    /**
+     * Keyword-only BM25 search (fallback when semantic ranking unavailable).
+     */
+    private function keywordSearch(string $query, string $domainSlug = null, int $topK = 5): array
+    {
+        $url = "{$this->endpoint}/indexes/{$this->index}/docs/search?api-version={$this->apiVersion}";
+
+        $body = [
+            'search' => $query,
+            'queryType' => 'simple',
+            'top' => $topK,
+            'select' => 'id,title,content,page_number,chunk_index,domain,document_id,author,description',
+        ];
+
+        if ($domainSlug) {
+            $body['filter'] = "domain eq '{$domainSlug}'";
+        }
+
+        $startTime = microtime(true);
+
+        $response = Http::withHeaders([
+            'api-key' => $this->apiKey,
+            'Content-Type' => 'application/json',
+        ])->timeout(30)->post($url, $body);
+
+        $latencyMs = (int) ((microtime(true) - $startTime) * 1000);
+
+        if ($response->failed()) {
+            return [
+                'success' => false,
+                'error' => $response->json('error.message', 'Search failed'),
+                'latency_ms' => $latencyMs,
+            ];
+        }
+
+        $results = $response->json('value', []);
+
+        $chunks = array_map(function ($result) {
+            return [
+                'id' => $result['id'] ?? null,
+                'title' => $result['title'] ?? 'Unknown',
+                'content' => $result['content'] ?? '',
+                'page' => $result['page_number'] ?? null,
+                'chunk_index' => $result['chunk_index'] ?? null,
+                'domain' => $result['domain'] ?? null,
+                'document_id' => $result['document_id'] ?? null,
+                'author' => $result['author'] ?? null,
                 'score' => $result['@search.score'] ?? 0,
                 'reranker_score' => null,
                 'captions' => [],
@@ -86,6 +163,7 @@ class AzureSearchService
             'chunks' => $chunks,
             'count' => count($chunks),
             'latency_ms' => $latencyMs,
+            'search_mode' => 'keyword',
         ];
     }
 

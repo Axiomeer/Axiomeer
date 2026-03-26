@@ -12,6 +12,19 @@
     </div>
 </div>
 
+@if (session('success'))
+    <div class="alert alert-success alert-dismissible fade show" role="alert">
+        {{ session('success') }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+@endif
+@if (session('error'))
+    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+        {{ session('error') }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+@endif
+
 {{-- Azure Services Status --}}
 <div class="card">
     <div class="card-header">
@@ -156,6 +169,9 @@
             <iconify-icon icon="iconamoon:category-duotone" class="text-info me-1"></iconify-icon>
             Domain Configuration
         </h5>
+        <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#addDomainModal">
+            <i class="bx bx-plus me-1"></i> Add Domain
+        </button>
     </div>
     <div class="card-body p-0">
         <div class="table-responsive">
@@ -168,6 +184,7 @@
                         <th>Documents</th>
                         <th>Queries</th>
                         <th>Status</th>
+                        <th class="text-end">Actions</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -188,6 +205,20 @@
                                     <span class="badge bg-success-subtle text-success">Active</span>
                                 @else
                                     <span class="badge bg-secondary-subtle text-secondary">Inactive</span>
+                                @endif
+                            </td>
+                            <td class="text-end">
+                                <button class="btn btn-sm btn-light" data-bs-toggle="modal" data-bs-target="#editDomainModal-{{ $domain->id }}" title="Edit">
+                                    <i class="bx bx-edit-alt"></i>
+                                </button>
+                                @if ($domain->documents_count == 0 && $domain->queries_count == 0)
+                                    <form method="POST" action="{{ route('settings.domains.destroy', $domain) }}" class="d-inline"
+                                          onsubmit="return confirm('Delete domain {{ $domain->display_name }}?')">
+                                        @csrf @method('DELETE')
+                                        <button type="submit" class="btn btn-sm btn-light text-danger" title="Delete">
+                                            <i class="bx bx-trash"></i>
+                                        </button>
+                                    </form>
                                 @endif
                             </td>
                         </tr>
@@ -254,5 +285,136 @@
         </div>
     </div>
 </div>
+
+{{-- Add Domain Modal --}}
+<div class="modal fade" id="addDomainModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="POST" action="{{ route('settings.domains.store') }}">
+                @csrf
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <iconify-icon icon="iconamoon:sign-plus-duotone" class="text-primary me-1"></iconify-icon>
+                        Add Domain
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label fw-medium">Display Name <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" name="display_name" required placeholder="e.g. Education">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-medium">Icon <span class="text-danger">*</span></label>
+                        <select class="form-select" name="icon" required>
+                            @foreach ($availableIcons as $icon)
+                                <option value="{{ $icon }}">{{ str_replace(['iconamoon:', '-duotone'], '', $icon) }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-medium">Color <span class="text-danger">*</span></label>
+                        <div class="d-flex flex-wrap gap-2">
+                            @foreach ($availableColors as $color)
+                                <div>
+                                    <input type="radio" class="btn-check" name="color" id="add_color_{{ $color }}" value="{{ $color }}" {{ $loop->first ? 'checked' : '' }}>
+                                    <label class="btn btn-sm btn-{{ $color }}" for="add_color_{{ $color }}">{{ ucfirst($color) }}</label>
+                                </div>
+                            @endforeach
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-medium">Citation Format</label>
+                        <select class="form-select" name="citation_format">
+                            <option value="inline">Inline</option>
+                            <option value="footnote">Footnote</option>
+                            <option value="apa">APA</option>
+                        </select>
+                    </div>
+                    <div class="mb-0">
+                        <label class="form-label fw-medium">System Prompt</label>
+                        <textarea class="form-control" name="system_prompt" rows="3" placeholder="Custom instructions for this domain..."></textarea>
+                        <div class="form-text">Optional prompt that guides how the LLM answers questions in this domain.</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bx bx-plus me-1"></i> Create Domain
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+{{-- Edit Domain Modals --}}
+@foreach ($domains as $domain)
+    <div class="modal fade" id="editDomainModal-{{ $domain->id }}" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <form method="POST" action="{{ route('settings.domains.update', $domain) }}">
+                    @csrf @method('PUT')
+                    <div class="modal-header">
+                        <h5 class="modal-title">
+                            <iconify-icon icon="iconamoon:edit-duotone" class="text-primary me-1"></iconify-icon>
+                            Edit Domain: {{ $domain->display_name }}
+                        </h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label class="form-label fw-medium">Display Name <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" name="display_name" value="{{ $domain->display_name }}" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-medium">Icon <span class="text-danger">*</span></label>
+                            <select class="form-select" name="icon" required>
+                                @foreach ($availableIcons as $icon)
+                                    <option value="{{ $icon }}" {{ $domain->icon === $icon ? 'selected' : '' }}>
+                                        {{ str_replace(['iconamoon:', '-duotone'], '', $icon) }}
+                                    </option>
+                                @endforeach
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-medium">Color <span class="text-danger">*</span></label>
+                            <div class="d-flex flex-wrap gap-2">
+                                @foreach ($availableColors as $color)
+                                    <div>
+                                        <input type="radio" class="btn-check" name="color" id="edit_{{ $domain->id }}_color_{{ $color }}" value="{{ $color }}" {{ $domain->color === $color ? 'checked' : '' }}>
+                                        <label class="btn btn-sm btn-{{ $color }}" for="edit_{{ $domain->id }}_color_{{ $color }}">{{ ucfirst($color) }}</label>
+                                    </div>
+                                @endforeach
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-medium">Citation Format</label>
+                            <select class="form-select" name="citation_format">
+                                <option value="inline" {{ ($domain->citation_format ?? 'inline') === 'inline' ? 'selected' : '' }}>Inline</option>
+                                <option value="footnote" {{ $domain->citation_format === 'footnote' ? 'selected' : '' }}>Footnote</option>
+                                <option value="apa" {{ $domain->citation_format === 'apa' ? 'selected' : '' }}>APA</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-medium">System Prompt</label>
+                            <textarea class="form-control" name="system_prompt" rows="3">{{ $domain->system_prompt }}</textarea>
+                        </div>
+                        <div class="mb-0">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" name="is_active" id="active_{{ $domain->id }}" value="1" {{ $domain->is_active ? 'checked' : '' }}>
+                                <label class="form-check-label" for="active_{{ $domain->id }}">Active</label>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Save Changes</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+@endforeach
 
 @endsection

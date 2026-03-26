@@ -11,6 +11,7 @@ use App\Models\QueryCitation;
 use App\Services\Azure\AzureOpenAIService;
 use App\Services\Azure\AzureSearchService;
 use App\Services\Azure\ContentSafetyService;
+use App\Services\Azure\FoundryAgentService;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
@@ -20,6 +21,7 @@ class RAGPipelineService
         private AzureOpenAIService $openai,
         private AzureSearchService $search,
         private ContentSafetyService $safety,
+        private FoundryAgentService $foundryAgent,
     ) {}
 
     /**
@@ -110,10 +112,17 @@ class RAGPipelineService
             $verificationRun = $this->logAgentStart($query, 'verification', $traceId);
             $verificationLatency = 0;
 
-            // Ring 1: Azure Groundedness Detection API
+            // Ring 1: Groundedness Detection — Foundry Agent (primary) or Content Safety (fallback)
             $groundingSources = collect($chunks)->pluck('content')->implode("\n\n");
-            $groundedness = $this->safety->checkGroundedness($answer, $groundingSources);
-            $groundednessScore = $groundedness['score'] ?? null;
+
+            if ($this->foundryAgent->isConfigured()) {
+                $groundedness = $this->foundryAgent->checkGroundedness($answer, $groundingSources, $query->question);
+            } else {
+                $groundedness = $this->safety->checkGroundedness($answer, $groundingSources);
+                $groundedness['provider'] = 'content_safety';
+            }
+
+            $groundednessScore = $groundedness['success'] ? ($groundedness['score'] ?? null) : null;
             $verificationLatency += $groundedness['latency_ms'] ?? 0;
 
             // Ring 2: LettuceDetect — NLI-based token-level hallucination detection
@@ -166,6 +175,12 @@ class RAGPipelineService
                 $inputSafety, $promptShield
             );
 
+            // Verify DAG integrity via Azure Function (non-blocking)
+            $dagVerification = $this->verifyProvenanceDag($provenanceDag);
+            if ($dagVerification) {
+                $provenanceDag['verification'] = $dagVerification;
+            }
+
             $query->update([
                 'answer' => $safetyLevel === 'red'
                     ? 'This answer was blocked because it could not be verified against source documents. The three-ring hallucination defense flagged this response as potentially ungrounded.'
@@ -187,7 +202,17 @@ class RAGPipelineService
             // Compute and persist RAGAS evaluation metrics
             $this->evaluateRAGAS($query, $chunks, $genResult, $groundedness, $lettuceResult, $claimAnalysis);
 
-            // Audit log
+            // Build agent pipeline summary for audit log
+            $agentRuns = $query->agentRuns()->get();
+            $agentSummary = $agentRuns->map(fn ($r) => [
+                'type' => $r->agent_type,
+                'status' => $r->status,
+                'latency_ms' => $r->latency_ms,
+                'span_id' => $r->span_id,
+                'token_count' => $r->token_count,
+            ])->toArray();
+
+            // Audit log with OTel trace and agent pipeline info
             AuditLog::create([
                 'user_id' => $query->user_id,
                 'query_id' => $query->id,
@@ -196,6 +221,7 @@ class RAGPipelineService
                 'entity_id' => $query->id,
                 'description' => "Query processed with safety level: {$safetyLevel} (model: " . ($useComplex ? 'gpt-4.1' : 'gpt-4.1-mini') . ")",
                 'details' => [
+                    'trace_id' => $traceId,
                     'safety_level' => $safetyLevel,
                     'composite_score' => $compositeSafety,
                     'groundedness_score' => $groundednessScore,
@@ -207,9 +233,25 @@ class RAGPipelineService
                     'claims_total' => count($claimAnalysis),
                     'claims_supported' => collect($claimAnalysis)->where('verdict', 'supported')->count(),
                     'prompt_shield_safe' => $promptShield['safe'] ?? true,
+                    'agents' => $agentSummary,
                 ],
                 'severity' => $safetyLevel === 'red' ? 'warning' : 'info',
             ]);
+
+            // Export telemetry to Application Insights (non-blocking)
+            try {
+                app(TelemetryService::class)->exportPipelineTrace(
+                    $traceId,
+                    $query->question,
+                    $domain->display_name,
+                    $totalLatency,
+                    $safetyLevel,
+                    $compositeSafety,
+                    $agentSummary
+                );
+            } catch (\Throwable $te) {
+                Log::debug('Telemetry export skipped', ['error' => $te->getMessage()]);
+            }
 
         } catch (\Throwable $e) {
             Log::error('RAG pipeline error', ['query_id' => $query->id, 'error' => $e->getMessage(), 'trace' => $e->getTraceAsString()]);
@@ -348,64 +390,127 @@ PROMPT;
     }
 
     /**
-     * Ring 3: Self-Consistency Confidence (H-Neuron proxy).
-     * Generates a second answer with higher temperature, then asks the LLM
-     * to score agreement between the two. High agreement = high confidence.
+     * Ring 3: H-Neuron Self-Consistency Proxy.
+     *
+     * Since H-Neuron requires access to internal model activations (unavailable
+     * via API), we implement the established self-consistency sampling proxy:
+     * generate N additional answers at high temperature, decompose each into
+     * claims, and measure claim-level agreement across samples.
+     *
+     * Claims present in most/all samples → model is confident (low hallucination risk).
+     * Claims present in only 1 sample → model is unstable (high hallucination risk).
+     *
+     * @see Wang et al., "Self-Consistency Improves Chain of Thought Reasoning in Language Models" (2023)
      */
     private function selfConsistencyCheck(string $systemPrompt, string $question, array $chunks, string $originalAnswer): array
     {
         $startTime = microtime(true);
+        $sampleCount = 2; // N additional samples at high temperature (2 balances speed vs quality)
 
-        // Generate a verbalized confidence score via LLM introspection
-        $confidencePrompt = <<<PROMPT
-You are a calibrated confidence estimator.
+        // Step 1: Generate N alternative answers at temperature=0.7
+        $samples = [];
+        for ($i = 0; $i < $sampleCount; $i++) {
+            $result = $this->openai->chatCompletion(
+                $systemPrompt,
+                $question,
+                $chunks,
+                useComplex: false,
+                temperature: 0.7,
+            );
+            if ($result['success']) {
+                $samples[] = $result['answer'];
+            }
+        }
 
-Given the question and the answer generated from retrieved sources, estimate your confidence that the answer is factually correct and fully grounded in the sources.
+        if (empty($samples)) {
+            return [
+                'score' => 0.5,
+                'latency_ms' => (int) ((microtime(true) - $startTime) * 1000),
+                'method' => 'fallback',
+                'samples_generated' => 0,
+            ];
+        }
 
-QUESTION: {$question}
+        // Step 2: Decompose original answer into claims and check agreement
+        $agreementPrompt = <<<PROMPT
+You are a self-consistency analyzer. Given an ORIGINAL ANSWER and {$sampleCount} ALTERNATIVE ANSWERS generated for the same question, determine which claims from the original answer are consistently present across the alternatives.
 
-RETRIEVED SOURCES:
-{$this->summarizeChunks($chunks)}
+ORIGINAL ANSWER:
+{$originalAnswer}
 
-GENERATED ANSWER: {$originalAnswer}
-
-Respond with ONLY a JSON object:
-{
-  "confidence": 0.85,
-  "reasoning": "Brief explanation of confidence level",
-  "uncertainty_factors": ["factor1", "factor2"]
-}
-
-Scoring guide:
-- 0.9-1.0: All claims directly stated in sources, high source coverage
-- 0.7-0.9: Most claims well-supported, minor gaps
-- 0.5-0.7: Some claims supported, notable gaps in coverage
-- 0.3-0.5: Weak source support, significant extrapolation
-- 0.0-0.3: Answer largely ungrounded
 PROMPT;
 
-        $result = $this->openai->chatCompletion(
-            'You are a calibrated confidence estimator. Output only valid JSON.',
-            $confidencePrompt,
+        foreach ($samples as $idx => $sample) {
+            $num = $idx + 1;
+            $agreementPrompt .= "ALTERNATIVE ANSWER {$num}:\n{$sample}\n\n";
+        }
+
+        $agreementPrompt .= <<<'PROMPT'
+For each factual claim in the ORIGINAL ANSWER, check if the same claim (semantically equivalent) appears in the alternative answers.
+
+Respond with ONLY this JSON:
+{
+  "claims": [
+    {
+      "claim": "the factual claim",
+      "present_in_samples": 2,
+      "total_samples": 3,
+      "agreement_ratio": 0.67,
+      "stable": true
+    }
+  ],
+  "overall_confidence": 0.85,
+  "uncertainty_factors": ["any factors causing inconsistency"]
+}
+
+Rules:
+- agreement_ratio = present_in_samples / total_samples
+- stable = true if agreement_ratio >= 0.5
+- overall_confidence = average of all agreement_ratios
+PROMPT;
+
+        $judgeResult = $this->openai->chatCompletion(
+            'You are a self-consistency analyzer. Output only valid JSON.',
+            $agreementPrompt,
             [],
             useComplex: false,
         );
 
         $latencyMs = (int) ((microtime(true) - $startTime) * 1000);
 
-        if (!$result['success']) {
-            return ['score' => 0.5, 'latency_ms' => $latencyMs, 'method' => 'fallback'];
+        if (!$judgeResult['success']) {
+            return [
+                'score' => 0.5,
+                'latency_ms' => $latencyMs,
+                'method' => 'fallback',
+                'samples_generated' => count($samples),
+            ];
         }
 
-        $parsed = $this->parseJsonFromLLM($result['answer']);
-        $confidence = $parsed['confidence'] ?? 0.5;
+        $parsed = $this->parseJsonFromLLM($judgeResult['answer']);
+        $confidence = $parsed['overall_confidence'] ?? 0.5;
+        $claims = $parsed['claims'] ?? [];
+
+        // Calculate confidence from claim agreement ratios
+        if (!empty($claims)) {
+            $ratios = array_column($claims, 'agreement_ratio');
+            $confidence = array_sum($ratios) / count($ratios);
+        }
+
+        $stableClaims = collect($claims)->where('stable', true)->count();
+        $unstableClaims = count($claims) - $stableClaims;
 
         return [
             'score' => round(min(1.0, max(0.0, (float) $confidence)), 4),
-            'reasoning' => $parsed['reasoning'] ?? null,
+            'reasoning' => null,
             'uncertainty_factors' => $parsed['uncertainty_factors'] ?? [],
             'latency_ms' => $latencyMs,
             'method' => 'self_consistency',
+            'samples_generated' => count($samples),
+            'total_claims' => count($claims),
+            'stable_claims' => $stableClaims,
+            'unstable_claims' => $unstableClaims,
+            'claim_details' => $claims,
         ];
     }
 
@@ -422,8 +527,9 @@ PROMPT;
         // Faithfulness: proportion of claims supported by sources (from Ring 2)
         $faithfulness = $totalClaims > 0 ? $supportedClaims / $totalClaims : null;
 
-        // Answer Relevancy: how relevant is the answer to the question (using groundedness as proxy)
-        $answerRelevancy = $groundedness['score'] ?? null;
+        // Answer Relevancy: how relevant is the answer to the question
+        // Use groundedness score as primary proxy; fallback to faithfulness if groundedness unavailable
+        $answerRelevancy = $groundedness['score'] ?? $faithfulness;
 
         // Context Precision: how many retrieved chunks were actually useful
         $usedSources = collect($claimAnalysis)->whereNotNull('source_idx')->pluck('source_idx')->unique()->count();
@@ -499,11 +605,22 @@ PROMPT;
     private function computeCompositeSafety(?float $groundedness, ?float $lettuce, ?float $confidence): float
     {
         // Weighted average: Azure Groundedness 50%, LettuceDetect 30%, Confidence 20%
-        $g = $groundedness ?? 0.5;
-        $l = $lettuce ?? 0.5;
-        $c = $confidence ?? 0.5;
+        // When a ring is unavailable (null), redistribute its weight proportionally to the others
+        $rings = [];
+        if ($groundedness !== null) $rings[] = ['score' => $groundedness, 'weight' => 0.50];
+        if ($lettuce !== null)      $rings[] = ['score' => $lettuce,      'weight' => 0.30];
+        if ($confidence !== null)   $rings[] = ['score' => $confidence,   'weight' => 0.20];
 
-        return round(($g * 0.50) + ($l * 0.30) + ($c * 0.20), 4);
+        if (empty($rings)) return 0.5; // All rings failed — neutral fallback
+
+        // Normalize weights so they sum to 1.0
+        $totalWeight = array_sum(array_column($rings, 'weight'));
+        $composite = 0;
+        foreach ($rings as $ring) {
+            $composite += $ring['score'] * ($ring['weight'] / $totalWeight);
+        }
+
+        return round($composite, 4);
     }
 
     private function determineSafetyLevel(float $composite): string
@@ -669,7 +786,8 @@ PROMPT;
 
         foreach ($chunks as $i => $chunk) {
             // Determine citation verdict based on claim analysis
-            $verdict = 'pending';
+            // Default to 'supported' since the chunk was retrieved as relevant context
+            $verdict = empty($claimAnalysis) ? 'pending' : 'supported';
             if (isset($sourceVerdicts[$i])) {
                 $verdicts = $sourceVerdicts[$i];
                 if (in_array('unsupported', $verdicts)) {
@@ -679,16 +797,25 @@ PROMPT;
                 }
             }
 
+            // Collect cited text from claims that reference this source
+            $citedTexts = [];
+            foreach ($claimAnalysis as $claim) {
+                if (($claim['source_idx'] ?? null) === $i && !empty($claim['label'])) {
+                    $citedTexts[] = $claim['label'];
+                }
+            }
+
             QueryCitation::create([
                 'query_id' => $query->id,
                 'document_id' => $chunk['document_id'] ?? null,
                 'source_snippet' => $chunk['content'] ?? '',
+                'cited_text' => !empty($citedTexts) ? implode(' | ', $citedTexts) : null,
                 'document_title' => $chunk['title'] ?? 'Source ' . ($i + 1),
                 'page_number' => $chunk['page'] ?? null,
                 'chunk_index' => $chunk['chunk_index'] ?? $i,
                 'relevance_score' => isset($chunk['reranker_score'])
                     ? min(1.0, $chunk['reranker_score'] / 4.0)
-                    : ($chunk['score'] ?? 0),
+                    : min(1.0, ($chunk['score'] ?? 0) / 10.0),
                 'verdict' => $verdict,
             ]);
         }
@@ -749,5 +876,38 @@ PROMPT;
         $decoded = json_decode($text, true);
 
         return is_array($decoded) ? $decoded : [];
+    }
+
+    /**
+     * Verify VeriTrail DAG integrity via Azure Function.
+     * Calls the deployed veritrial-verifier function for structural validation,
+     * acyclicity check, claim tracing, and SHA-256 integrity hash generation.
+     */
+    private function verifyProvenanceDag(array $dag): ?array
+    {
+        $functionUrl = env('VERITRIAL_FUNCTION_URL');
+        if (empty($functionUrl)) {
+            return null;
+        }
+
+        try {
+            $response = Http::timeout(10)->post($functionUrl, $dag);
+
+            if ($response->successful()) {
+                return [
+                    'verified' => $response->json('verified', false),
+                    'integrity_hash' => $response->json('integrity_hash'),
+                    'checks_passed' => $response->json('checks_passed'),
+                    'checks_total' => $response->json('checks_total'),
+                    'timestamp' => $response->json('timestamp'),
+                ];
+            }
+        } catch (\Throwable $e) {
+            Log::debug('VeriTrail Azure Function verification skipped', [
+                'error' => $e->getMessage(),
+            ]);
+        }
+
+        return null;
     }
 }

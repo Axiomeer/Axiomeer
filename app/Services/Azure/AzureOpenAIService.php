@@ -30,6 +30,7 @@ class AzureOpenAIService
         string $userMessage,
         array $context = [],
         bool $useComplex = false,
+        float $temperature = 0.1,
     ): array {
         $deployment = $useComplex ? $this->complexDeployment : $this->deployment;
         $url = "{$this->endpoint}/openai/deployments/{$deployment}/chat/completions?api-version={$this->apiVersion}";
@@ -56,7 +57,7 @@ class AzureOpenAIService
             'Content-Type' => 'application/json',
         ])->timeout(60)->post($url, [
             'messages' => $messages,
-            'temperature' => 0.1, // Low temperature for factual, grounded responses
+            'temperature' => $temperature,
             'max_tokens' => 2048,
             'top_p' => 0.95,
         ]);
