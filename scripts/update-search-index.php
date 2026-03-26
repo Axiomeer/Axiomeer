@@ -192,7 +192,8 @@ if (!empty($putResult['error'])) {
     exit(1);
 }
 
-if ($putResult['status'] === 200 || $putResult['status'] === 201) {
+// 200 = updated, 201 = created, 204 = no content (success with no body)
+if (in_array($putResult['status'], [200, 201, 204], true)) {
     echo "SUCCESS: Index updated — 'content_vector' field and HNSW vector search added.\n";
     echo "HTTP status: {$putResult['status']}\n";
     exit(0);
