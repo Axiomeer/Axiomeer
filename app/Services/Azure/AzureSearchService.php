@@ -11,13 +11,19 @@ class AzureSearchService
     private string $apiKey;
     private string $index;
     private string $apiVersion;
+    private string $vectorField;
+    private string $embeddingDeployment;
+    private AzureOpenAIService $openai;
 
-    public function __construct()
+    public function __construct(AzureOpenAIService $openai)
     {
-        $this->endpoint = rtrim(config('azure.search.endpoint', ''), '/');
-        $this->apiKey = config('azure.search.api_key', '');
-        $this->index = config('azure.search.index');
-        $this->apiVersion = config('azure.search.api_version');
+        $this->endpoint            = rtrim(config('azure.search.endpoint', ''), '/');
+        $this->apiKey              = config('azure.search.api_key', '');
+        $this->index               = config('azure.search.index');
+        $this->apiVersion          = config('azure.search.api_version');
+        $this->vectorField         = config('azure.search.vector_field', 'content_vector');
+        $this->embeddingDeployment = config('azure.search.embedding_deployment', 'text-embedding-ada-002');
+        $this->openai              = $openai;
     }
 
     /**
@@ -34,15 +40,31 @@ class AzureSearchService
 
         $semanticConfig = config('azure.search.semantic_config', 'axiomeer-semantic');
 
+        // Attempt to generate a query vector for true hybrid (BM25 + vector + semantic) search
+        $vector = $this->generateQueryVector($query);
+        $isHybrid = !empty($vector);
+
         $body = [
-            'search' => $query,
-            'queryType' => 'semantic',
+            'search'               => $query,
+            'queryType'            => 'semantic',
             'semanticConfiguration' => $semanticConfig,
-            'top' => $topK,
-            'select' => 'id,title,content,page_number,chunk_index,domain,document_id,author,description',
-            'captions' => 'extractive',
-            'answers' => 'extractive|count-1',
+            'top'                  => $topK,
+            'select'               => 'id,title,content,page_number,chunk_index,domain,document_id,author,description',
+            'captions'             => 'extractive',
+            'answers'              => 'extractive|count-1',
         ];
+
+        if ($isHybrid) {
+            $body['vectorQueries'] = [
+                [
+                    'kind'       => 'vector',
+                    'vector'     => $vector,
+                    'fields'     => $this->vectorField,
+                    'k'          => $topK,
+                    'exhaustive' => false,
+                ],
+            ];
+        }
 
         if ($domainSlug) {
             $body['filter'] = "domain eq '{$domainSlug}'";
@@ -97,11 +119,11 @@ class AzureSearchService
         }, $results);
 
         return [
-            'success' => true,
-            'chunks' => $chunks,
-            'count' => count($chunks),
-            'latency_ms' => $latencyMs,
-            'search_mode' => 'semantic',
+            'success'     => true,
+            'chunks'      => $chunks,
+            'count'       => count($chunks),
+            'latency_ms'  => $latencyMs,
+            'search_mode' => $isHybrid ? 'hybrid' : 'semantic',
         ];
     }
 
@@ -181,16 +203,28 @@ class AzureSearchService
 
         $actions = [];
         foreach ($chunks as $chunk) {
-            $actions[] = [
+            $chunkContent = $chunk['content'] ?? '';
+
+            $action = [
                 '@search.action' => 'mergeOrUpload',
-                'id' => $documentId . '-' . ($chunk['chunk_index'] ?? 0),
-                'title' => $title,
-                'content' => $chunk['content'] ?? '',
-                'page_number' => $chunk['page'] ?? null,
-                'chunk_index' => $chunk['chunk_index'] ?? 0,
-                'domain' => $domain,
-                'document_id' => $documentId,
+                'id'             => $documentId . '-' . ($chunk['chunk_index'] ?? 0),
+                'title'          => $title,
+                'content'        => $chunkContent,
+                'page_number'    => $chunk['page'] ?? null,
+                'chunk_index'    => $chunk['chunk_index'] ?? 0,
+                'domain'         => $domain,
+                'document_id'    => $documentId,
             ];
+
+            // Attempt to generate a vector for this chunk; skip vector on failure
+            if (!empty($chunkContent)) {
+                $vector = $this->generateChunkVector($chunkContent);
+                if (!empty($vector)) {
+                    $action[$this->vectorField] = $vector;
+                }
+            }
+
+            $actions[] = $action;
         }
 
         // Batch in groups of 1000 (Azure limit)
@@ -248,6 +282,42 @@ class AzureSearchService
         ])->timeout(30)->post($url, ['value' => $actions]);
 
         return ['success' => !$response->failed(), 'removed' => count($actions)];
+    }
+
+    /**
+     * Generate a query embedding vector for hybrid search.
+     * Returns float[] on success, or [] on failure (graceful degradation).
+     */
+    private function generateQueryVector(string $query): array
+    {
+        $result = $this->openai->generateEmbedding($query);
+
+        if (!$result['success'] || empty($result['embedding'])) {
+            Log::warning('Query embedding failed — falling back to semantic-only search', [
+                'error' => $result['error'] ?? 'unknown',
+            ]);
+            return [];
+        }
+
+        return $result['embedding'];
+    }
+
+    /**
+     * Generate an embedding vector for a document chunk.
+     * Returns float[] on success, or [] on failure (graceful degradation).
+     */
+    private function generateChunkVector(string $content): array
+    {
+        $result = $this->openai->generateEmbedding($content);
+
+        if (!$result['success'] || empty($result['embedding'])) {
+            Log::warning('Chunk embedding failed — indexing chunk without vector', [
+                'error' => $result['error'] ?? 'unknown',
+            ]);
+            return [];
+        }
+
+        return $result['embedding'];
     }
 
     private function mockSearch(string $query, int $topK): array

@@ -25,7 +25,7 @@ class QueryController extends Controller
             ->orderByDesc('last_activity_at')
             ->paginate(20);
 
-        $domains = Domain::where('is_active', true)->get();
+        $domains = Domain::with(['documents'])->where('is_active', true)->get();
 
         // Also get orphan queries (pre-conversation era)
         $orphanQueries = Query::with(['domain'])

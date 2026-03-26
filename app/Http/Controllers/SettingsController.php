@@ -7,6 +7,7 @@ use App\Services\Azure\AzureOpenAIService;
 use App\Services\Azure\AzureSearchService;
 use App\Services\Azure\ContentSafetyService;
 use App\Services\Azure\DocumentIntelligenceService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 
@@ -108,6 +109,7 @@ class SettingsController extends Controller
             'color' => 'required|string|max:20',
             'citation_format' => 'nullable|string|max:50',
             'system_prompt' => 'nullable|string|max:2000',
+            'safety_threshold' => 'nullable|numeric|min:0.45|max:0.95',
         ]);
 
         Domain::create([
@@ -119,6 +121,7 @@ class SettingsController extends Controller
             'citation_format' => $request->citation_format ?? 'inline',
             'system_prompt' => $request->system_prompt,
             'is_active' => true,
+            'safety_threshold' => $request->safety_threshold ?? 0.75,
         ]);
 
         return redirect()->route('settings')->with('success', "Domain \"{$request->display_name}\" created.");
@@ -133,6 +136,7 @@ class SettingsController extends Controller
             'citation_format' => 'nullable|string|max:50',
             'system_prompt' => 'nullable|string|max:2000',
             'is_active' => 'boolean',
+            'safety_threshold' => 'nullable|numeric|min:0.45|max:0.95',
         ]);
 
         $domain->update([
@@ -143,9 +147,48 @@ class SettingsController extends Controller
             'citation_format' => $request->citation_format ?? 'inline',
             'system_prompt' => $request->system_prompt,
             'is_active' => $request->boolean('is_active', true),
+            'safety_threshold' => $request->safety_threshold ?? $domain->safety_threshold ?? 0.75,
         ]);
 
         return redirect()->route('settings')->with('success', "Domain \"{$domain->display_name}\" updated.");
+    }
+
+    /**
+     * Generate a domain-specific system prompt using Azure OpenAI as a fine-tune agent.
+     */
+    public function generateDomainPrompt(Request $request, AzureOpenAIService $openai): JsonResponse
+    {
+        $request->validate([
+            'domain_name' => 'required|string|max:100',
+            'citation_format' => 'nullable|string|max:50',
+        ]);
+
+        $domainName = $request->input('domain_name');
+        $citationFormat = $request->input('citation_format', 'inline');
+
+        $result = $openai->chatCompletion(
+            systemPrompt: 'You are a system prompt engineer specializing in Retrieval-Augmented Generation (RAG) systems for regulated industries. '
+                . 'Your task is to generate a concise, effective system prompt for a domain-specific RAG assistant. '
+                . 'The system prompt should instruct the LLM to: answer only from provided sources, cite evidence using the specified format, '
+                . 'say "I don\'t know" when sources are insufficient, maintain a professional and domain-appropriate tone, '
+                . 'and avoid speculation or hallucination. Output ONLY the system prompt text, no explanations.',
+            userMessage: "Generate a system prompt for a RAG assistant specializing in the \"{$domainName}\" domain. "
+                . "Citation format: {$citationFormat}. "
+                . "The assistant helps regulated teams answer compliance-critical questions from internal documents. "
+                . "Keep it under 300 words.",
+            context: [],
+            useComplex: false,
+        );
+
+        if (!$result['success']) {
+            return response()->json(['error' => 'Failed to generate prompt'], 500);
+        }
+
+        return response()->json([
+            'prompt' => trim($result['answer']),
+            'model' => $result['model'] ?? 'gpt-4.1-mini',
+            'tokens' => $result['token_count'] ?? 0,
+        ]);
     }
 
     public function destroyDomain(Domain $domain)

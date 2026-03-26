@@ -182,41 +182,29 @@
             </div>
             <div class="card-body">
                 <div class="d-flex flex-column gap-3">
-                    {{-- Agent Pipeline --}}
-                    <div class="d-flex align-items-center justify-content-between p-2 rounded bg-light">
-                        <div class="d-flex align-items-center gap-2">
-                            <iconify-icon icon="iconamoon:lightning-2-duotone" class="fs-20 text-primary"></iconify-icon>
-                            <span class="fw-medium fs-14">Agent Pipeline</span>
+                    @php
+                        $statusItems = [
+                            ['key' => 'pipeline', 'label' => 'Agent Pipeline', 'icon' => 'iconamoon:lightning-2-duotone', 'color' => 'primary'],
+                            ['key' => 'search', 'label' => 'Azure AI Search', 'icon' => 'iconamoon:search-duotone', 'color' => 'info'],
+                            ['key' => 'safety', 'label' => 'Content Safety', 'icon' => 'iconamoon:shield-yes-duotone', 'color' => 'warning'],
+                            ['key' => 'groundedness', 'label' => 'Foundry Groundedness', 'icon' => 'iconamoon:target-duotone', 'color' => 'danger'],
+                        ];
+                    @endphp
+                    @foreach ($statusItems as $item)
+                        <div class="d-flex align-items-center justify-content-between p-2 rounded bg-light">
+                            <div class="d-flex align-items-center gap-2">
+                                <iconify-icon icon="{{ $item['icon'] }}" class="fs-20 text-{{ $item['color'] }}"></iconify-icon>
+                                <span class="fw-medium fs-14">{{ $item['label'] }}</span>
+                            </div>
+                            @if ($serviceStatus[$item['key']] ?? false)
+                                <span class="badge bg-success-subtle text-success rounded-pill">
+                                    <i class="bx bx-check-circle me-1"></i>Connected
+                                </span>
+                            @else
+                                <span class="badge bg-secondary-subtle text-secondary rounded-pill">Not configured</span>
+                            @endif
                         </div>
-                        <span class="badge bg-secondary-subtle text-secondary rounded-pill">Not configured</span>
-                    </div>
-
-                    {{-- Azure AI Search --}}
-                    <div class="d-flex align-items-center justify-content-between p-2 rounded bg-light">
-                        <div class="d-flex align-items-center gap-2">
-                            <iconify-icon icon="iconamoon:search-duotone" class="fs-20 text-info"></iconify-icon>
-                            <span class="fw-medium fs-14">Azure AI Search</span>
-                        </div>
-                        <span class="badge bg-secondary-subtle text-secondary rounded-pill">Not configured</span>
-                    </div>
-
-                    {{-- Content Safety --}}
-                    <div class="d-flex align-items-center justify-content-between p-2 rounded bg-light">
-                        <div class="d-flex align-items-center gap-2">
-                            <iconify-icon icon="iconamoon:shield-yes-duotone" class="fs-20 text-warning"></iconify-icon>
-                            <span class="fw-medium fs-14">Content Safety</span>
-                        </div>
-                        <span class="badge bg-secondary-subtle text-secondary rounded-pill">Not configured</span>
-                    </div>
-
-                    {{-- Groundedness API --}}
-                    <div class="d-flex align-items-center justify-content-between p-2 rounded bg-light">
-                        <div class="d-flex align-items-center gap-2">
-                            <iconify-icon icon="iconamoon:target-duotone" class="fs-20 text-danger"></iconify-icon>
-                            <span class="fw-medium fs-14">Groundedness API</span>
-                        </div>
-                        <span class="badge bg-secondary-subtle text-secondary rounded-pill">Not configured</span>
-                    </div>
+                    @endforeach
                 </div>
             </div>
         </div>

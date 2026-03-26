@@ -92,6 +92,47 @@ class AzureOpenAIService
     }
 
     /**
+     * Generate an embedding vector for the given text using the configured embedding deployment.
+     * Returns ['success' => bool, 'embedding' => float[], 'latency_ms' => int]
+     */
+    public function generateEmbedding(string $text): array
+    {
+        $embeddingDeployment = config('azure.search.embedding_deployment', 'text-embedding-ada-002');
+        $url = "{$this->endpoint}/openai/deployments/{$embeddingDeployment}/embeddings?api-version=2024-02-01";
+
+        $startTime = microtime(true);
+
+        $response = Http::withHeaders([
+            'api-key' => $this->apiKey,
+            'Content-Type' => 'application/json',
+        ])->timeout(30)->post($url, [
+            'input' => $text,
+        ]);
+
+        $latencyMs = (int) ((microtime(true) - $startTime) * 1000);
+
+        if ($response->failed()) {
+            Log::warning('Azure OpenAI embedding failed', [
+                'status' => $response->status(),
+                'body'   => $response->body(),
+            ]);
+
+            return [
+                'success'    => false,
+                'error'      => $response->json('error.message', 'Embedding request failed'),
+                'embedding'  => [],
+                'latency_ms' => $latencyMs,
+            ];
+        }
+
+        return [
+            'success'    => true,
+            'embedding'  => $response->json('data.0.embedding', []),
+            'latency_ms' => $latencyMs,
+        ];
+    }
+
+    /**
      * Generate embeddings for a text string.
      */
     public function embeddings(string $text): array

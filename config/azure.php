@@ -27,6 +27,8 @@ return [
         'index' => env('AZURE_AI_SEARCH_INDEX', 'axiomeer-knowledge'),
         'api_version' => env('AZURE_AI_SEARCH_API_VERSION', '2024-07-01'),
         'semantic_config' => env('AZURE_AI_SEARCH_SEMANTIC_CONFIG', 'default'),
+        'vector_field' => env('AZURE_SEARCH_VECTOR_FIELD', 'content_vector'),
+        'embedding_deployment' => env('AZURE_OPENAI_EMBEDDING_DEPLOYMENT', 'text-embedding-ada-002'),
     ],
 
     /*
@@ -81,6 +83,29 @@ return [
         'endpoint' => env('AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT'),
         'api_key' => env('AZURE_DOCUMENT_INTELLIGENCE_KEY'),
         'api_version' => env('AZURE_DOCUMENT_INTELLIGENCE_API_VERSION', '2024-11-30'),
+    ],
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Azure Key Vault
+    |--------------------------------------------------------------------------
+    */
+    'key_vault' => [
+        'uri' => env('AZURE_KEY_VAULT_URI'),
+        'api_version' => '7.4',
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Azure Service Bus
+    |--------------------------------------------------------------------------
+    */
+    'service_bus' => [
+        'connection' => env('AZURE_SERVICE_BUS_CONNECTION'),
+        'namespace' => env('AZURE_SERVICE_BUS_NAMESPACE', 'axiomeer-bus'),
+        'audit_queue' => env('AZURE_SERVICE_BUS_AUDIT_QUEUE', 'audit-events'),
+        'verification_queue' => env('AZURE_SERVICE_BUS_VERIFICATION_QUEUE', 'verification-queue'),
     ],
 
 ];
