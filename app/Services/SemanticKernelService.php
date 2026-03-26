@@ -3,24 +3,37 @@
 namespace App\Services;
 
 use App\Services\Azure\AzureOpenAIService;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
 /**
- * SemanticKernelService — implements Semantic Kernel patterns in PHP.
+ * SemanticKernelService — bridges Laravel to the real Semantic Kernel SDK.
  *
- * Provides SK-style abstractions: Memory (semantic recall), Skills/Functions
- * (named AI functions), and Planner (goal decomposition). Uses Azure OpenAI
- * as the underlying LLM, matching the SK .NET/Python SDK patterns.
+ * The actual SK orchestration runs in an Azure Function (Python) using the
+ * official `semantic-kernel` pip package. This class calls that function,
+ * which implements the Sequential Process pattern:
  *
- * This enables the Axiomeer pipeline to leverage SK-style orchestration
- * without requiring a .NET or Python runtime.
+ *   DocumentPlugin or CompliancePlugin (domain-routed)
+ *   → SK ChatHistory (stateful context)
+ *   → AzureChatCompletion (GPT-4.1-mini or GPT-4.1)
+ *   → Structured response
+ *
+ * Falls back to direct AzureOpenAIService if the SK function is unavailable.
+ *
+ * Also maintains local SK-pattern memory for session context.
  */
 class SemanticKernelService
 {
     private array $skills = [];
     private array $memory = [];
+    private string $functionUrl;
+    private string $functionKey;
 
-    public function __construct(private AzureOpenAIService $openai) {}
+    public function __construct(private AzureOpenAIService $openai)
+    {
+        $this->functionUrl = env('SK_FUNCTION_URL', '');
+        $this->functionKey = env('SK_FUNCTION_KEY', '');
+    }
 
     /**
      * Register a named semantic skill (SK "semantic function" concept).
@@ -156,15 +169,14 @@ class SemanticKernelService
     }
 
     /**
-     * Generate a grounded answer using the SK DocumentSkill orchestration.
+     * Generate a grounded answer using the REAL Semantic Kernel SDK.
      *
-     * This is the primary integration point between SemanticKernel and the
-     * RAG pipeline. Instead of calling OpenAI directly, the pipeline calls
-     * this method which:
-     *  1. Uses SK memory to save the user question context
-     *  2. Invokes the appropriate domain skill via the SK planner
-     *  3. Falls back to a direct DocumentSkill invocation if planning fails
-     *  4. Returns the same shape as AzureOpenAIService::chatCompletion()
+     * Calls the axiomeer-sk Azure Function (Python) which runs the official
+     * semantic-kernel pip package with the Sequential Process pattern:
+     *   - CompliancePlugin for Legal / Healthcare (citation-enforced)
+     *   - DocumentPlugin for Finance / General
+     *
+     * Falls back to direct AzureOpenAIService if the SK function is down.
      */
     public function generateGroundedAnswer(
         string $question,
@@ -172,27 +184,70 @@ class SemanticKernelService
         array  $chunks,
         bool   $useComplex = false
     ): array {
-        // Save question to SK memory for this session
         $this->saveMemory('queries', uniqid(), $question, ['type' => 'user_question']);
 
-        // Build context string from retrieved chunks (SK "TextMemory" pattern)
-        $contextText = collect($chunks)
-            ->map(fn ($c) => trim($c['content'] ?? ''))
-            ->filter()
-            ->implode("\n\n---\n\n");
-
-        // Use SK planner to pick the best skill for this question
         $domain = $this->detectDomainFromPrompt($systemPrompt);
-        $skillName = match ($domain) {
-            'legal'      => 'ComplianceSkill',
-            'healthcare' => 'ComplianceSkill',
-            default      => 'DocumentSkill',
-        };
 
-        Log::info('SemanticKernel: routing to skill', ['skill' => $skillName, 'domain' => $domain, 'complex' => $useComplex]);
+        // ── Primary: real Semantic Kernel via Azure Function ──────────────
+        if ($this->functionUrl && $this->functionKey) {
+            try {
+                $start = microtime(true);
 
-        // Invoke via SK — pass the enriched system prompt + context to OpenAI
-        $enrichedSystem = $systemPrompt . "\n\n[Semantic Kernel Orchestrator — {$skillName} active]";
+                $response = Http::withHeaders([
+                    'x-functions-key' => $this->functionKey,
+                    'Content-Type'    => 'application/json',
+                ])->timeout(45)->post($this->functionUrl, [
+                    'question'      => $question,
+                    'chunks'        => $chunks,
+                    'system_prompt' => $systemPrompt,
+                    'domain'        => $domain,
+                    'use_complex'   => $useComplex,
+                ]);
+
+                $latency = (int) ((microtime(true) - $start) * 1000);
+
+                if ($response->successful()) {
+                    $data = $response->json();
+                    if (!empty($data['answer'])) {
+                        $this->saveMemory('answers', uniqid(), $data['answer'], [
+                            'question'   => $question,
+                            'sk_plugin'  => $data['sk_plugin'] ?? 'unknown',
+                        ]);
+
+                        Log::info('SemanticKernel: real SK function success', [
+                            'plugin'  => $data['sk_plugin'] ?? '?',
+                            'pattern' => $data['sk_pattern'] ?? 'sequential',
+                            'domain'  => $domain,
+                            'latency' => $latency,
+                        ]);
+
+                        return [
+                            'success'    => true,
+                            'answer'     => $data['answer'],
+                            'latency_ms' => $latency,
+                            'token_count' => 0,
+                            'sk_skill'   => $data['sk_plugin'] ?? 'DocumentPlugin',
+                            'sk_domain'  => $domain,
+                            'sk_pattern' => 'sequential',
+                            'sk_real'    => true,
+                        ];
+                    }
+                }
+
+                Log::warning('SemanticKernel: SK function returned error, falling back', [
+                    'status' => $response->status(),
+                    'body'   => $response->body(),
+                ]);
+            } catch (\Throwable $e) {
+                Log::warning('SemanticKernel: SK function unreachable, falling back', ['error' => $e->getMessage()]);
+            }
+        }
+
+        // ── Fallback: direct AzureOpenAI ───────────────────────────────────
+        Log::info('SemanticKernel: using direct OpenAI fallback', ['domain' => $domain]);
+
+        $plugin = in_array($domain, ['legal', 'healthcare']) ? 'CompliancePlugin' : 'DocumentPlugin';
+        $enrichedSystem = $systemPrompt . "\n\n[SK fallback — {$plugin} — Sequential Process Step 3]";
 
         $result = $this->openai->chatCompletion(
             systemPrompt: $enrichedSystem,
@@ -202,21 +257,18 @@ class SemanticKernelService
         );
 
         if ($result['success']) {
-            // Save answer to SK memory for potential recall in follow-up queries
-            $this->saveMemory('answers', uniqid(), $result['answer'] ?? '', [
-                'question' => $question,
-                'skill'    => $skillName,
-            ]);
-
-            $result['sk_skill'] = $skillName;
-            $result['sk_domain'] = $domain;
+            $this->saveMemory('answers', uniqid(), $result['answer'] ?? '', ['question' => $question]);
+            $result['sk_skill']   = $plugin;
+            $result['sk_domain']  = $domain;
+            $result['sk_pattern'] = 'sequential';
+            $result['sk_real']    = false;
         }
 
         return $result;
     }
 
     /**
-     * Detect domain from system prompt text to route to appropriate SK skill.
+     * Detect domain from system prompt to route to the right SK plugin.
      */
     private function detectDomainFromPrompt(string $systemPrompt): string
     {
