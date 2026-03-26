@@ -12,6 +12,7 @@ use App\Services\Azure\AzureOpenAIService;
 use App\Services\Azure\AzureSearchService;
 use App\Services\Azure\ContentSafetyService;
 use App\Services\Azure\FoundryAgentService;
+use App\Services\SemanticKernelService;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
@@ -22,6 +23,7 @@ class RAGPipelineService
         private AzureSearchService $search,
         private ContentSafetyService $safety,
         private FoundryAgentService $foundryAgent,
+        private SemanticKernelService $sk,
     ) {}
 
     /**
@@ -86,17 +88,17 @@ class RAGPipelineService
             // Model Router: route to complex model for long/multi-hop questions
             $useComplex = $this->shouldUseComplexModel($query->question, $chunks, $domain);
 
-            $genResult = $this->openai->chatCompletion(
-                $systemPrompt,
-                $query->question,
-                $chunks,
-                useComplex: $useComplex,
-            );
+            // Semantic Kernel orchestrates generation — routes to domain skill, saves to memory
+            $genResult = $this->sk->generateGroundedAnswer($query->question, $systemPrompt, $chunks, $useComplex);
 
             if (!$genResult['success']) {
-                // Fallback: retry with simple model if complex failed
+                // Fallback: retry with simple model via SK, then direct OpenAI
                 if ($useComplex) {
-                    Log::warning('Complex model failed, falling back to simple model');
+                    Log::warning('SK complex generation failed, retrying with fast model');
+                    $genResult = $this->sk->generateGroundedAnswer($query->question, $systemPrompt, $chunks, false);
+                }
+                if (!$genResult['success']) {
+                    Log::warning('SK generation failed, falling back to direct OpenAI');
                     $genResult = $this->openai->chatCompletion($systemPrompt, $query->question, $chunks, useComplex: false);
                 }
                 if (!$genResult['success']) {
@@ -104,7 +106,11 @@ class RAGPipelineService
                     return $this->failQuery($query, 'Answer generation failed: ' . ($genResult['error'] ?? 'Unknown'));
                 }
             }
-            $this->logAgentEnd($generationRun, 'completed', array_merge($genResult, ['model_router' => $useComplex ? 'complex' : 'fast']), $genResult['latency_ms'] ?? 0, $genResult['token_count'] ?? 0);
+            $this->logAgentEnd($generationRun, 'completed', array_merge($genResult, [
+                'model_router' => $useComplex ? 'complex' : 'fast',
+                'sk_skill' => $genResult['sk_skill'] ?? 'direct',
+                'sk_domain' => $genResult['sk_domain'] ?? null,
+            ]), $genResult['latency_ms'] ?? 0, $genResult['token_count'] ?? 0);
 
             $answer = $genResult['answer'];
 
