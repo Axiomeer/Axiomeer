@@ -31,7 +31,7 @@ flowchart LR
         VDAG[VeriTrail DAG]
     end
 
-    subgraph App["Laravel App"]
+    subgraph App["Laravel App · Docker Container\nPHP 8.2-fpm + Nginx + Supervisor"]
         HTTP[HTTP Layer]
         RAG[RAGPipelineService]
         SKPHP[SemanticKernelService.php\ncaller + fallback]
@@ -190,7 +190,7 @@ Each DAG is verified by an **Azure Function** (Node.js) that runs:
 
 - **Backend**: Laravel 12, PHP 8.2
 - **Frontend**: Bootstrap 5 (Reback theme), Iconify, vis.js (interactive VeriTrail DAG)
-- **Orchestration**: SemanticKernelService — SK Skills, Planner, Memory in PHP (domain-aware routing)
+- **Orchestration**: Real Semantic Kernel SDK (Python Azure Function) + SemanticKernelService.php caller
 - **AI Models**: Azure OpenAI GPT-4.1 + GPT-4.1-mini (model router), text-embedding-ada-002
 - **Search**: Azure AI Search — hybrid BM25 + HNSW vector (1536-dim, cosine), RRF fusion
 - **Safety**: Azure Content Safety, Prompt Shields, AI Foundry Groundedness Agent
@@ -199,10 +199,13 @@ Each DAG is verified by an **Azure Function** (Node.js) that runs:
 - **Observability**: Application Insights, OpenTelemetry trace\_id + span\_id per agent run
 - **Verification**: Azure Functions (Node.js) — DAG integrity + SHA-256
 - **Database**: MySQL 8
+- **Container**: Docker (PHP 8.2-fpm + Nginx + Supervisor), docker-compose for local dev
 
 ---
 
 ## Getting Started
+
+### Local (XAMPP / artisan)
 
 ```bash
 composer install
@@ -218,6 +221,16 @@ Update the Azure AI Search index schema to add the vector field:
 ```bash
 php scripts/update-search-index.php
 ```
+
+### Docker
+
+```bash
+cp .env.example .env   # fill in Azure credentials
+docker compose up --build
+php artisan migrate     # run inside container or set up entrypoint
+```
+
+The app runs on `http://localhost:8000`. The Dockerfile uses PHP 8.2-fpm + Nginx + Supervisor on Alpine Linux, builds frontend assets at image build time, and keeps storage in a named volume.
 
 ---
 

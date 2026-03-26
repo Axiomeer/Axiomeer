@@ -44,34 +44,41 @@
         <div class="card text-center">
             <div class="card-body py-4">
 
-                {{-- Avatar with upload overlay --}}
-                <div class="position-relative mx-auto mb-3" style="width: 96px; height: 96px;">
-                    @if ($user->avatar)
-                        <img src="{{ asset('storage/' . $user->avatar) }}"
-                             alt="{{ $user->name }}"
-                             id="avatarPreview"
-                             class="rounded-circle border border-2 border-primary-subtle"
-                             style="width: 96px; height: 96px; object-fit: cover;">
-                    @else
-                        <div id="avatarPlaceholder" class="d-flex align-items-center justify-content-center rounded-circle bg-primary-subtle"
-                             style="width: 96px; height: 96px;">
-                            <iconify-icon icon="iconamoon:profile-circle-duotone" class="text-primary" style="font-size: 56px;"></iconify-icon>
+                {{-- Avatar upload area --}}
+                <label for="avatarFileInput" style="cursor: pointer;" title="Click to change photo">
+                    <div class="position-relative mx-auto mb-1" style="width: 100px; height: 100px;">
+
+                        {{-- The photo or placeholder --}}
+                        @if ($user->avatar)
+                            <img src="{{ asset('storage/' . $user->avatar) }}"
+                                 alt="{{ $user->name }}"
+                                 id="avatarPreview"
+                                 class="rounded-circle border border-2 border-primary"
+                                 style="width: 100px; height: 100px; object-fit: cover;">
+                        @else
+                            <div id="avatarPlaceholder" class="d-flex align-items-center justify-content-center rounded-circle bg-primary-subtle border border-2 border-primary-subtle"
+                                 style="width: 100px; height: 100px;">
+                                <iconify-icon icon="iconamoon:profile-circle-duotone" class="text-primary" style="font-size: 60px;"></iconify-icon>
+                            </div>
+                            <img src="" alt="" id="avatarPreview"
+                                 class="rounded-circle border border-2 border-primary d-none"
+                                 style="width: 100px; height: 100px; object-fit: cover;">
+                        @endif
+
+                        {{-- Full-size dark overlay with camera icon on hover --}}
+                        <div class="position-absolute top-0 start-0 w-100 h-100 rounded-circle d-flex flex-column align-items-center justify-content-center"
+                             style="background: rgba(0,0,0,0.45); opacity: 0; transition: opacity 0.2s;"
+                             id="avatarOverlay">
+                            <iconify-icon icon="iconamoon:camera-duotone" class="text-white" style="font-size: 28px;"></iconify-icon>
+                            <span class="text-white fw-semibold" style="font-size: 10px; letter-spacing: 0.04em; margin-top: 2px;">CHANGE</span>
                         </div>
-                        <img src="" alt="" id="avatarPreview"
-                             class="rounded-circle border border-2 border-primary-subtle d-none"
-                             style="width: 96px; height: 96px; object-fit: cover;">
-                    @endif
+                    </div>
+                </label>
 
-                    {{-- Camera button overlay --}}
-                    <label for="avatarFileInput"
-                           class="position-absolute bottom-0 end-0 d-flex align-items-center justify-content-center rounded-circle bg-primary text-white"
-                           style="width: 28px; height: 28px; cursor: pointer;" title="Change photo">
-                        <iconify-icon icon="iconamoon:camera-duotone" style="font-size: 14px;"></iconify-icon>
-                    </label>
-                    <input type="file" id="avatarFileInput" class="d-none" accept="image/jpeg,image/png,image/gif,image/webp">
-                </div>
+                <p class="text-muted fs-11 mb-2">Click photo to upload</p>
+                <input type="file" id="avatarFileInput" class="d-none" accept="image/jpeg,image/png,image/gif,image/webp">
 
-                {{-- Avatar action buttons — shown after picking a file --}}
+                {{-- Avatar action buttons — appear after picking a file --}}
                 <div id="avatarActions" class="d-none mb-2">
                     <form id="avatarUploadForm" method="POST" action="{{ route('profile.avatar.update') }}" enctype="multipart/form-data">
                         @csrf
@@ -83,7 +90,7 @@
                     </form>
                 </div>
 
-                {{-- Remove photo link (only if avatar set) --}}
+                {{-- Remove photo link --}}
                 @if ($user->avatar)
                     <div class="mb-2">
                         <form method="POST" action="{{ route('profile.avatar.remove') }}" class="d-inline">
@@ -298,22 +305,30 @@
 @push('scripts')
 <script>
 (function () {
-    const fileInput    = document.getElementById('avatarFileInput');
-    const hiddenInput  = document.getElementById('avatarHiddenInput');
-    const preview      = document.getElementById('avatarPreview');
-    const placeholder  = document.getElementById('avatarPlaceholder');
-    const actions      = document.getElementById('avatarActions');
-    const cancelBtn    = document.getElementById('avatarCancelBtn');
+    const fileInput   = document.getElementById('avatarFileInput');
+    const hiddenInput = document.getElementById('avatarHiddenInput');
+    const preview     = document.getElementById('avatarPreview');
+    const placeholder = document.getElementById('avatarPlaceholder');
+    const overlay     = document.getElementById('avatarOverlay');
+    const actions     = document.getElementById('avatarActions');
+    const cancelBtn   = document.getElementById('avatarCancelBtn');
 
     if (!fileInput) return;
 
     let originalSrc = preview ? preview.src : '';
 
+    // Show/hide overlay on hover over the whole label area
+    const label = fileInput.closest('label') || fileInput.previousElementSibling;
+    const avatarWrap = overlay ? overlay.closest('.position-relative') : null;
+    if (avatarWrap) {
+        avatarWrap.addEventListener('mouseenter', () => { if (overlay) overlay.style.opacity = '1'; });
+        avatarWrap.addEventListener('mouseleave', () => { if (overlay) overlay.style.opacity = '0'; });
+    }
+
     fileInput.addEventListener('change', function () {
         const file = this.files[0];
         if (!file) return;
 
-        // Live preview
         const reader = new FileReader();
         reader.onload = (e) => {
             if (placeholder) placeholder.classList.add('d-none');
@@ -322,7 +337,6 @@
         };
         reader.readAsDataURL(file);
 
-        // Copy file to hidden input inside the upload form
         const dt = new DataTransfer();
         dt.items.add(file);
         hiddenInput.files = dt.files;
@@ -336,8 +350,7 @@
             hiddenInput.value = '';
             actions.classList.add('d-none');
 
-            // Restore original state
-            if (originalSrc && originalSrc !== window.location.href) {
+            if (originalSrc && !originalSrc.endsWith(window.location.href)) {
                 preview.src = originalSrc;
                 preview.classList.remove('d-none');
                 if (placeholder) placeholder.classList.add('d-none');
