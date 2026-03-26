@@ -456,7 +456,8 @@
                                         $ckColor = ['green' => 'success', 'yellow' => 'warning', 'red' => 'danger'][$ckLevel] ?? 'success';
                                         $ckLabelText = ['green' => 'GROUNDED', 'yellow' => 'REVIEW NEEDED', 'red' => 'BLOCKED'][$ckLevel] ?? 'GROUNDED';
                                         $ckIcon = ['green' => 'iconamoon:shield-yes-duotone', 'yellow' => 'iconamoon:shield-duotone', 'red' => 'iconamoon:shield-cross-duotone'][$ckLevel] ?? 'iconamoon:shield-yes-duotone';
-                                        $claimNodesForCockpit = collect(json_decode($msg->provenance_dag, true)['nodes'] ?? [])->where('type', 'claim');
+                                        $dag = is_array($msg->provenance_dag) ? $msg->provenance_dag : (json_decode($msg->provenance_dag, true) ?? []);
+                                        $claimNodesForCockpit = collect($dag['nodes'] ?? [])->where('type', 'claim');
                                     @endphp
                                     <div class="safety-cockpit-card mb-3">
                                         {{-- Banner --}}
