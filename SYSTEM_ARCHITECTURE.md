@@ -34,7 +34,7 @@ flowchart LR
     subgraph App["Laravel App"]
         HTTP[HTTP Layer]
         RAG[RAGPipelineService]
-        SK[SemanticKernelService]
+        SKPHP[SemanticKernelService.php\ncaller + fallback]
         DB[(MySQL)]
     end
 
@@ -44,11 +44,18 @@ flowchart LR
         DP[Domain Policy\nper-domain guardrails]
     end
 
-    subgraph Pipeline["Multi-Agent Pipeline"]
-        A1[Content Safety Agent]
-        A2[Retrieval Agent]
-        A3[Generation Agent]
-        A4[Verification Agent]
+    subgraph Pipeline["Sequential Process — 4 Agents"]
+        A1[1 · Content Safety Agent]
+        A2[2 · Retrieval Agent]
+        A3[3 · Generation Agent]
+        A4[4 · Verification Agent]
+    end
+
+    subgraph SKFn["Azure Function — axiomeer-sk\nReal Semantic Kernel SDK · Python"]
+        SKKERNEL[SK Kernel]
+        SKPLUGIN[CompliancePlugin\nDocumentPlugin]
+        SKHIST[SK ChatHistory\nstateful context]
+        SKROUTE{domain router}
     end
 
     subgraph AzureAI["Azure AI"]
@@ -70,7 +77,7 @@ flowchart LR
         SB[Service Bus\naudit-events queue]
         BLOB[Blob Storage\ndocuments]
         AI[App Insights\nOpenTelemetry]
-        FN[Azure Function\nDAG integrity + SHA-256]
+        FNDAG[Azure Function\nDAG integrity + SHA-256]
     end
 
     Q -->|question| HTTP
@@ -89,15 +96,21 @@ flowchart LR
     SEARCH --> EMB
     EMB --> AOAI
 
-    A3 --> SK
-    SK -->|domain skill| AOAI
+    A3 --> SKPHP
+    SKPHP -->|HTTP POST\nquestion + chunks + domain| SKFn
+    SKROUTE -->|legal · healthcare| SKPLUGIN
+    SKROUTE -->|finance · general| SKPLUGIN
+    SKKERNEL --> SKHIST
+    SKPLUGIN --> SKKERNEL
+    SKKERNEL -->|AzureChatCompletion| AOAI
+    SKPHP -.->|fallback if SK down| AOAI
 
     A4 --> R1 & R2 & R3
     R1 --> FOUND
     R2 --> AOAI
     R3 --> AOAI
 
-    A4 -->|verify DAG| FN
+    A4 -->|verify DAG| FNDAG
     RAG --> DB & SB & AI
     KV -.->|secrets| App
     DOCINTEL -->|chunks| SEARCH
@@ -106,14 +119,27 @@ flowchart LR
 
 ---
 
-## The 4 Agents
+## The 4 Agents — Sequential Process Pattern
 
-| Agent | Role | Azure Service | Output |
-|---|---|---|---|
-| **Content Safety** | Screen input for harm + jailbreaks | Content Safety + Prompt Shields | safe/blocked, shield result |
-| **Retrieval** | Hybrid BM25 + vector search with RRF | AI Search + Embeddings (ada-002) | Ranked chunks with scores |
-| **Generation** | SK-orchestrated answer via model router | OpenAI GPT-4.1-mini / GPT-4.1 | Grounded answer + SK skill used |
-| **Verification** | Three-ring hallucination defense + RAGAS | AI Foundry + OpenAI NLI | Composite score + claim verdicts |
+Each agent runs in strict order, passing its output as input to the next. This is the **Sequential Process** pattern from the Semantic Kernel SDK — deterministic, guardrailed, no fan-out.
+
+| # | Agent | Role | Azure Service | Output |
+|---|---|---|---|---|
+| 1 | **Content Safety** | Screen input for harm + jailbreaks | Content Safety + Prompt Shields | safe/blocked, shield result |
+| 2 | **Retrieval** | Hybrid BM25 + vector search with RRF | AI Search + Embeddings (ada-002) | Ranked chunks with scores |
+| 3 | **Generation** | Real SK Sequential Process via Azure Function | axiomeer-sk (Python, semantic-kernel SDK) → GPT-4.1-mini / GPT-4.1 | Grounded answer, SK plugin used |
+| 4 | **Verification** | Three-ring hallucination defense + RAGAS | AI Foundry + OpenAI NLI | Composite score + claim verdicts |
+
+### SK Agent 3 — Plugin Routing
+
+```
+domain = legal or healthcare  →  CompliancePlugin  (citation-enforced, regulatory tone)
+domain = finance or general   →  DocumentPlugin    (standard grounded Q&A)
+                                       ↓
+                              SK Kernel + ChatHistory (stateful)
+                                       ↓
+                              AzureChatCompletion → GPT-4.1-mini / GPT-4.1
+```
 
 ---
 
