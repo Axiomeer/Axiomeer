@@ -126,8 +126,16 @@
                                     @endif
 
                                     {{-- Answer Text --}}
-                                    <div class="bg-light rounded-3 p-3 rounded-start-0 mb-2">
-                                        <div class="fs-14">{!! nl2br(e($msg->answer)) !!}</div>
+                                    <div class="bg-light rounded-3 p-3 rounded-start-0 mb-2" id="answer-bubble-{{ $msg->id }}">
+                                        <div class="d-flex justify-content-between align-items-start gap-2">
+                                            <div class="fs-14 flex-grow-1">{!! nl2br(e($msg->answer)) !!}</div>
+                                            <button class="btn btn-sm btn-light tts-btn flex-shrink-0 mt-1"
+                                                    data-msg-id="{{ $msg->id }}"
+                                                    data-text="{{ e($msg->answer) }}"
+                                                    title="Read aloud (Azure Speech)">
+                                                <iconify-icon icon="iconamoon:volume-high-duotone" class="fs-16 text-primary"></iconify-icon>
+                                            </button>
+                                        </div>
                                     </div>
 
                                     {{-- Expandable Details Buttons --}}
@@ -316,10 +324,10 @@
                                         </div>
                                     @endif
 
-                                    {{-- VeriTrail DAG (vis.js interactive graph) — open by default --}}
+                                    {{-- VeriTrail DAG (vis.js interactive graph) — collapsed by default --}}
                                     @if ($msg->provenance_dag)
                                         @php $dag = $msg->provenance_dag; @endphp
-                                        <div class="collapse show mb-2" id="veritrial-{{ $msg->id }}">
+                                        <div class="collapse mb-2" id="veritrial-{{ $msg->id }}">
                                             <div class="border border-info rounded p-3" style="background: rgba(14,165,233,0.03);">
                                                 <div class="d-flex justify-content-between align-items-center mb-2">
                                                     <h6 class="fw-bold fs-13 mb-0 text-info">
@@ -872,9 +880,18 @@
 @push('scripts')
 <script>
 document.addEventListener('DOMContentLoaded', function () {
-    // Scroll chat to bottom
+    // Scroll to the top of the last bot response so the answer is visible, not buried in sources
     var container = document.getElementById('chatContainer');
-    if (container) container.scrollTop = container.scrollHeight;
+    if (container) {
+        var botBubbles = container.querySelectorAll('.chat-bubble-bot');
+        if (botBubbles.length > 0) {
+            var lastBot = botBubbles[botBubbles.length - 1];
+            // Scroll so the last bot bubble top is ~16px below the container top
+            container.scrollTop = lastBot.offsetTop - container.offsetTop - 16;
+        } else {
+            container.scrollTop = container.scrollHeight;
+        }
+    }
 
     // Initialize tooltips
     var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
@@ -1069,6 +1086,124 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 });
 </script>
+
+{{-- Azure Speech TTS --}}
+<script>
+(function () {
+    var activeSpeech = null; // { type: 'azure'|'browser', id, audio?, synth? }
+
+    function stopSpeech() {
+        if (!activeSpeech) return;
+        if (activeSpeech.type === 'azure' && activeSpeech.audio) {
+            activeSpeech.audio.pause();
+            activeSpeech.audio.src = '';
+        }
+        if (activeSpeech.type === 'browser') {
+            window.speechSynthesis.cancel();
+        }
+        resetBtn(activeSpeech.id);
+        activeSpeech = null;
+    }
+
+    function resetBtn(id) {
+        var btn = document.querySelector('.tts-btn[data-msg-id="' + id + '"]');
+        if (btn) btn.innerHTML = '<iconify-icon icon="iconamoon:volume-high-duotone" class="fs-16 text-primary"></iconify-icon>';
+    }
+
+    function setLoadingBtn(id) {
+        var btn = document.querySelector('.tts-btn[data-msg-id="' + id + '"]');
+        if (btn) btn.innerHTML = '<iconify-icon icon="iconamoon:loading-duotone" class="fs-16 text-muted" style="animation:spin 1s linear infinite"></iconify-icon>';
+    }
+
+    function setPlayingBtn(id) {
+        var btn = document.querySelector('.tts-btn[data-msg-id="' + id + '"]');
+        if (btn) btn.innerHTML = '<iconify-icon icon="iconamoon:stop-circle-duotone" class="fs-16 text-danger"></iconify-icon>';
+    }
+
+    function speakBrowser(id, text) {
+        if (!window.speechSynthesis) { resetBtn(id); return; }
+        var utt = new SpeechSynthesisUtterance(text);
+        utt.lang = 'en-US';
+        utt.rate = 1.0;
+        utt.onstart = function () { setPlayingBtn(id); };
+        utt.onend = function () { activeSpeech = null; resetBtn(id); };
+        utt.onerror = function () { activeSpeech = null; resetBtn(id); };
+        window.speechSynthesis.speak(utt);
+        activeSpeech = { type: 'browser', id: id };
+    }
+
+    function speakAzure(id, text) {
+        setLoadingBtn(id);
+        fetch('{{ route("api.speech-token") }}', {
+            headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': '{{ csrf_token() }}' }
+        })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+            if (data.error || !data.token || !data.region) {
+                speakBrowser(id, text);
+                return;
+            }
+            var region = data.region;
+            var token = data.token;
+            var ssml = '<?xml version="1.0" encoding="UTF-8"?>' +
+                '<speak version="1.0" xml:lang="en-US">' +
+                '<voice name="en-US-AriaNeural">' +
+                text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') +
+                '</voice></speak>';
+
+            fetch('https://' + region + '.tts.speech.microsoft.com/cognitiveservices/v1', {
+                method: 'POST',
+                headers: {
+                    'Authorization': 'Bearer ' + token,
+                    'Content-Type': 'application/ssml+xml',
+                    'X-Microsoft-OutputFormat': 'audio-24khz-96kbitrate-mono-mp3',
+                    'User-Agent': 'AxiomeerTTS'
+                },
+                body: ssml
+            })
+            .then(function (res) {
+                if (!res.ok) { speakBrowser(id, text); return null; }
+                return res.blob();
+            })
+            .then(function (blob) {
+                if (!blob) return;
+                var url = URL.createObjectURL(blob);
+                var audio = new Audio(url);
+                activeSpeech = { type: 'azure', id: id, audio: audio };
+                setPlayingBtn(id);
+                audio.onended = function () { activeSpeech = null; resetBtn(id); URL.revokeObjectURL(url); };
+                audio.onerror = function () { activeSpeech = null; resetBtn(id); speakBrowser(id, text); };
+                audio.play();
+            })
+            .catch(function () { speakBrowser(id, text); });
+        })
+        .catch(function () { speakBrowser(id, text); });
+    }
+
+    document.addEventListener('click', function (e) {
+        var btn = e.target.closest('.tts-btn');
+        if (!btn) return;
+        var id = btn.getAttribute('data-msg-id');
+        var text = btn.getAttribute('data-text') || '';
+
+        // If already speaking this message — stop
+        if (activeSpeech && activeSpeech.id === id) {
+            stopSpeech();
+            return;
+        }
+
+        // Stop anything else first
+        stopSpeech();
+
+        // Truncate very long answers to keep TTS snappy
+        var speakText = text.length > 2000 ? text.substring(0, 2000) + '…' : text;
+        speakAzure(id, speakText);
+    });
+})();
+</script>
+<style>
+    @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+</style>
 
 {{-- vis.js VeriTrail interactive graph --}}
 <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
