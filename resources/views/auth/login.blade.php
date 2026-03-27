@@ -43,10 +43,25 @@
 
     <button type="submit" class="btn btn-primary w-100">Sign In</button>
 
-    @if (Route::has('register'))
-        <p class="text-center text-muted mt-3 mb-0 fs-13">
-            Don't have an account? <a href="{{ route('register') }}" class="text-primary fw-medium">Create one</a>
-        </p>
-    @endif
+    <div class="position-relative my-4">
+        <hr class="text-muted opacity-25">
+        <div class="position-absolute top-50 start-50 translate-middle px-2 bg-body text-muted fs-12 fw-medium">
+            DEMO QUICK LOGIN
+        </div>
+    </div>
+
+    <div class="d-flex flex-wrap gap-2 justify-content-center">
+        <button type="button" class="btn btn-sm btn-outline-primary px-3 rounded-pill" onclick="demoLogin('admin@axiomeer.test')">Admin User</button>
+        <button type="button" class="btn btn-sm btn-outline-success px-3 rounded-pill" onclick="demoLogin('analyst@axiomeer.test')">Analyst User</button>
+        <button type="button" class="btn btn-sm btn-outline-info px-3 rounded-pill" onclick="demoLogin('viewer@axiomeer.test')">Viewer User</button>
+    </div>
+
+    <script>
+        function demoLogin(email) {
+            document.getElementById('email').value = email;
+            document.getElementById('password').value = 'password';
+            document.querySelector('form').submit();
+        }
+    </script>
 </form>
 @endsection

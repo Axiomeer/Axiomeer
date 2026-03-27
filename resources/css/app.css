@@ -10,24 +10,27 @@
     justify-content: center;
     padding: 14px 12px !important;
 }
+
 .axiomeer-logo-circle {
-    width: 42px;
-    height: 42px;
-    min-width: 42px;
+    width: 48px;
+    height: 48px;
+    min-width: 48px;
     border-radius: 50%;
     background: #fff;
-    border: 2px solid rgba(0,0,0,0.06);
-    box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+    border: 2px solid rgba(0, 0, 0, 0.06);
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
     display: flex;
     align-items: center;
     justify-content: center;
     overflow: hidden;
 }
+
 .axiomeer-logo-circle img {
-    width: 34px;
-    height: 34px;
+    width: 40px;
+    height: 40px;
     object-fit: contain;
 }
+
 .axiomeer-brand-text {
     font-size: 18px;
     font-weight: 700;
@@ -36,11 +39,13 @@
     white-space: nowrap;
 
 }
+
 [data-bs-theme="dark"] .axiomeer-logo-circle {
-    background: rgba(255,255,255,0.1);
-    border-color: rgba(255,255,255,0.1);
-    box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.1);
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
 }
+
 [data-bs-theme="dark"] .axiomeer-brand-text {
     color: #fff;
 }
@@ -60,9 +65,21 @@
     font-size: 11px;
     font-weight: 600;
 }
-.domain-pill.legal    { background: rgba(var(--bs-primary-rgb), 0.1);  color: var(--bs-primary); }
-.domain-pill.health   { background: rgba(var(--bs-success-rgb), 0.1);  color: var(--bs-success); }
-.domain-pill.finance  { background: rgba(var(--bs-warning-rgb), 0.1);  color: var(--bs-warning); }
+
+.domain-pill.legal {
+    background: rgba(var(--bs-primary-rgb), 0.1);
+    color: var(--bs-primary);
+}
+
+.domain-pill.health {
+    background: rgba(var(--bs-success-rgb), 0.1);
+    color: var(--bs-success);
+}
+
+.domain-pill.finance {
+    background: rgba(var(--bs-warning-rgb), 0.1);
+    color: var(--bs-warning);
+}
 
 /* Safety status indicators */
 .safety-badge {
@@ -74,9 +91,21 @@
     font-size: 11px;
     font-weight: 700;
 }
-.safety-badge.green  { background: rgba(var(--bs-success-rgb), 0.15); color: var(--bs-success); }
-.safety-badge.amber  { background: rgba(var(--bs-warning-rgb), 0.15); color: var(--bs-warning); }
-.safety-badge.red    { background: rgba(var(--bs-danger-rgb), 0.15);  color: var(--bs-danger); }
+
+.safety-badge.green {
+    background: rgba(var(--bs-success-rgb), 0.15);
+    color: var(--bs-success);
+}
+
+.safety-badge.amber {
+    background: rgba(var(--bs-warning-rgb), 0.15);
+    color: var(--bs-warning);
+}
+
+.safety-badge.red {
+    background: rgba(var(--bs-danger-rgb), 0.15);
+    color: var(--bs-danger);
+}
 
 /* Card header icon boxes (consistent sizing) */
 .card-header .avatar-sm {
@@ -93,6 +122,7 @@
     justify-content: center;
     background: var(--bs-body-bg);
 }
+
 .auth-card {
     width: 100%;
     max-width: 440px;

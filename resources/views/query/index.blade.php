@@ -47,7 +47,7 @@
                 <h6 class="card-title mb-0 fs-13">Conversations</h6>
                 <span class="badge bg-primary-subtle text-primary rounded-pill fs-10">{{ $conversations->total() }}</span>
             </div>
-            <div class="card-body p-0" style="max-height: 60vh; overflow-y: auto;">
+            <div class="card-body p-0" style="max-height: 60vh; overflow-y: auto; overflow-x: hidden;">
                 @forelse ($conversations as $conv)
                     @php $lastQuery = $conv->queries->first(); @endphp
                     <div class="conversation-item border-bottom px-3 py-2"

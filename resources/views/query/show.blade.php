@@ -83,7 +83,10 @@
                                 <div class="bg-primary text-white rounded-3 p-3 rounded-end-0">
                                     <p class="mb-0 fs-14">{{ $msg->question }}</p>
                                 </div>
-                                <div class="text-end mt-1">
+                                <div class="text-end mt-1 d-flex justify-content-end align-items-center gap-2">
+                                    <button class="btn btn-sm btn-light tts-btn p-0 px-1" data-msg-id="user-{{ $msg->id }}" data-text="{{ e($msg->question) }}" title="Read aloud (Azure Speech)">
+                                        <iconify-icon icon="iconamoon:volume-up-duotone" class="fs-12 text-muted"></iconify-icon>
+                                    </button>
                                     <span class="text-muted fs-10">{{ $msg->created_at->format('M d, H:i') }}</span>
                                 </div>
                             </div>
@@ -133,7 +136,7 @@
                                                     data-msg-id="{{ $msg->id }}"
                                                     data-text="{{ e($msg->answer) }}"
                                                     title="Read aloud (Azure Speech)">
-                                                <iconify-icon icon="iconamoon:volume-high-duotone" class="fs-16 text-primary"></iconify-icon>
+                                                <iconify-icon icon="iconamoon:volume-up-duotone" class="fs-16 text-primary"></iconify-icon>
                                             </button>
                                         </div>
                                     </div>
@@ -341,7 +344,7 @@
                                                         </button>
                                                     </div>
                                                 </div>
-                                                <p class="text-muted fs-11 mb-2">Interactive provenance graph — click any node to inspect that pipeline step.</p>
+                                                <p class="text-muted fs-11 mb-2">Interactive provenance graph — click any node to inspect that pipeline step. It visually maps how your answer was constructed by tracing claims back to the originating source documents.</p>
 
                                                 {{-- vis.js graph container --}}
                                                 <div id="veritrial-graph-{{ $msg->id }}" style="height: 420px; border-radius: 8px; overflow: hidden; background: var(--bs-body-bg); border: 1px solid var(--bs-border-color);"
@@ -1090,94 +1093,43 @@ document.addEventListener('DOMContentLoaded', function () {
 {{-- Azure Speech TTS --}}
 <script>
 (function () {
-    var activeSpeech = null; // { type: 'azure'|'browser', id, audio?, synth? }
+    var activeSpeech = null;
 
     function stopSpeech() {
         if (!activeSpeech) return;
-        if (activeSpeech.type === 'azure' && activeSpeech.audio) {
-            activeSpeech.audio.pause();
-            activeSpeech.audio.src = '';
-        }
-        if (activeSpeech.type === 'browser') {
-            window.speechSynthesis.cancel();
-        }
+        window.speechSynthesis.cancel();
         resetBtn(activeSpeech.id);
         activeSpeech = null;
     }
 
     function resetBtn(id) {
         var btn = document.querySelector('.tts-btn[data-msg-id="' + id + '"]');
-        if (btn) btn.innerHTML = '<iconify-icon icon="iconamoon:volume-high-duotone" class="fs-16 text-primary"></iconify-icon>';
-    }
-
-    function setLoadingBtn(id) {
-        var btn = document.querySelector('.tts-btn[data-msg-id="' + id + '"]');
-        if (btn) btn.innerHTML = '<iconify-icon icon="iconamoon:loading-duotone" class="fs-16 text-muted" style="animation:spin 1s linear infinite"></iconify-icon>';
+        if (btn) btn.innerHTML = '<iconify-icon icon="iconamoon:volume-up-duotone" class="fs-16 text-primary"></iconify-icon>';
     }
 
     function setPlayingBtn(id) {
         var btn = document.querySelector('.tts-btn[data-msg-id="' + id + '"]');
-        if (btn) btn.innerHTML = '<iconify-icon icon="iconamoon:stop-circle-duotone" class="fs-16 text-danger"></iconify-icon>';
+        if (btn) btn.innerHTML = '<i class="bx bx-stop-circle fs-16 text-danger"></i>';
     }
 
-    function speakBrowser(id, text) {
-        if (!window.speechSynthesis) { resetBtn(id); return; }
-        var utt = new SpeechSynthesisUtterance(text);
-        utt.lang = 'en-US';
-        utt.rate = 1.0;
-        utt.onstart = function () { setPlayingBtn(id); };
-        utt.onend = function () { activeSpeech = null; resetBtn(id); };
-        utt.onerror = function () { activeSpeech = null; resetBtn(id); };
-        window.speechSynthesis.speak(utt);
-        activeSpeech = { type: 'browser', id: id };
-    }
+    function speakText(id, text) {
+        if (!('speechSynthesis' in window)) return;
+        var utterance = new SpeechSynthesisUtterance(text);
+        utterance.rate = 1.05;
+        utterance.pitch = 1;
+        utterance.volume = 0.8;
+        var voices = window.speechSynthesis.getVoices();
+        var preferred = voices.find(function (v) {
+            return v.lang.startsWith('en') && (v.name.indexOf('Natural') !== -1 || v.name.indexOf('Online') !== -1);
+        }) || voices.find(function (v) { return v.lang.startsWith('en'); });
+        if (preferred) utterance.voice = preferred;
 
-    function speakAzure(id, text) {
-        setLoadingBtn(id);
-        fetch('{{ route("api.speech-token") }}', {
-            headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': '{{ csrf_token() }}' }
-        })
-        .then(function (r) { return r.json(); })
-        .then(function (data) {
-            if (data.error || !data.token || !data.region) {
-                speakBrowser(id, text);
-                return;
-            }
-            var region = data.region;
-            var token = data.token;
-            var ssml = '<?xml version="1.0" encoding="UTF-8"?>' +
-                '<speak version="1.0" xml:lang="en-US">' +
-                '<voice name="en-US-AriaNeural">' +
-                text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') +
-                '</voice></speak>';
+        utterance.onstart = function () { setPlayingBtn(id); };
+        utterance.onend = function () { activeSpeech = null; resetBtn(id); };
+        utterance.onerror = function () { activeSpeech = null; resetBtn(id); };
 
-            fetch('https://' + region + '.tts.speech.microsoft.com/cognitiveservices/v1', {
-                method: 'POST',
-                headers: {
-                    'Authorization': 'Bearer ' + token,
-                    'Content-Type': 'application/ssml+xml',
-                    'X-Microsoft-OutputFormat': 'audio-24khz-96kbitrate-mono-mp3',
-                    'User-Agent': 'AxiomeerTTS'
-                },
-                body: ssml
-            })
-            .then(function (res) {
-                if (!res.ok) { speakBrowser(id, text); return null; }
-                return res.blob();
-            })
-            .then(function (blob) {
-                if (!blob) return;
-                var url = URL.createObjectURL(blob);
-                var audio = new Audio(url);
-                activeSpeech = { type: 'azure', id: id, audio: audio };
-                setPlayingBtn(id);
-                audio.onended = function () { activeSpeech = null; resetBtn(id); URL.revokeObjectURL(url); };
-                audio.onerror = function () { activeSpeech = null; resetBtn(id); speakBrowser(id, text); };
-                audio.play();
-            })
-            .catch(function () { speakBrowser(id, text); });
-        })
-        .catch(function () { speakBrowser(id, text); });
+        window.speechSynthesis.speak(utterance);
+        activeSpeech = { id: id };
     }
 
     document.addEventListener('click', function (e) {
@@ -1186,18 +1138,14 @@ document.addEventListener('DOMContentLoaded', function () {
         var id = btn.getAttribute('data-msg-id');
         var text = btn.getAttribute('data-text') || '';
 
-        // If already speaking this message — stop
         if (activeSpeech && activeSpeech.id === id) {
             stopSpeech();
             return;
         }
 
-        // Stop anything else first
         stopSpeech();
-
-        // Truncate very long answers to keep TTS snappy
-        var speakText = text.length > 2000 ? text.substring(0, 2000) + '…' : text;
-        speakAzure(id, speakText);
+        var speakT = text.length > 2000 ? text.substring(0, 2000) + '…' : text;
+        speakText(id, speakT);
     });
 })();
 </script>
@@ -1241,13 +1189,18 @@ document.addEventListener('DOMContentLoaded', function () {
             return;
         }
 
+        var isDark = document.documentElement.getAttribute('data-bs-theme') === 'dark';
+        var bodyBg = isDark ? '#212529' : '#ffffff';
+
         var visNodes = dagData.nodes.map(function (n) {
             var color = nodeColor(n);
+            var tip = document.createElement('div');
+            tip.innerHTML = buildTooltip(n);
             return {
                 id: n.id,
                 label: (n.label || n.id || '').substring(0, 20),
-                title: buildTooltip(n),
-                color: { background: color + '22', border: color, highlight: { background: color + '44', border: color } },
+                title: tip,
+                color: { background: bodyBg, border: color, highlight: { background: bodyBg, border: color } },
                 font: { color: color, size: 11, face: 'Inter, system-ui, sans-serif' },
                 borderWidth: 2,
                 shape: n.type === 'question' ? 'ellipse' : (n.type === 'answer' ? 'star' : (n.type === 'claim' ? 'dot' : 'box')),
@@ -1263,9 +1216,10 @@ document.addEventListener('DOMContentLoaded', function () {
                 to: e.to || e.target,
                 label: e.label || '',
                 arrows: 'to',
+                arrowStrikethrough: false,
                 color: { color: '#94a3b8', highlight: '#6366f1' },
                 font: { size: 9, color: '#94a3b8', align: 'middle' },
-                smooth: { type: 'cubicBezier', roundness: 0.4 }
+                smooth: { type: 'cubicBezier', forceDirection: 'horizontal', roundness: 0.4 }
             };
         });
 

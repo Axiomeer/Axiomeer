@@ -6,7 +6,7 @@
             <div class="axiomeer-logo-circle">
                 <img src="{{ asset('images/logo.png') }}" alt="Axiomeer">
             </div>
-            <span class="axiomeer-brand-text logo-lg">Axiomeer</span>
+            <span class="axiomeer-brand-text logo-lg" style="margin-top: -50px;">Axiomeer</span>
         </a>
     </div>
 
