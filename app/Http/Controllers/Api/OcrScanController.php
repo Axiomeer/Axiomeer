@@ -25,24 +25,25 @@ class OcrScanController extends Controller
         }
         $binary = base64_decode($imageData);
 
-        // Azure AI Vision Read API (v4 OCR)
+        // Azure AI Vision Read API — GA version 2024-02-01
         $response = Http::withHeaders([
             'Ocp-Apim-Subscription-Key' => $key,
-            'Content-Type' => 'application/octet-stream',
-        ])->timeout(20)->post(
-            "{$endpoint}/computervision/imageanalysis:analyze?api-version=2023-02-01-preview&features=read",
-            $binary
+        ])->timeout(20)->withBody($binary, 'application/octet-stream')->post(
+            "{$endpoint}/computervision/imageanalysis:analyze?api-version=2024-02-01&features=read"
         );
 
         if ($response->failed()) {
-            return response()->json(['error' => 'OCR request failed: ' . $response->status()], 502);
+            return response()->json([
+                'error' => 'OCR request failed: HTTP ' . $response->status() . ' — ' . $response->body()
+            ], 502);
         }
 
         $json = $response->json();
+        // 2024-02-01 response structure: readResult.blocks[].lines[].text
         $lines = [];
-        foreach (data_get($json, 'readResult.pages', []) as $page) {
-            foreach (data_get($page, 'lines', []) as $line) {
-                $lines[] = $line['content'] ?? '';
+        foreach (data_get($json, 'readResult.blocks', []) as $block) {
+            foreach (data_get($block, 'lines', []) as $line) {
+                $lines[] = $line['text'] ?? ($line['content'] ?? '');
             }
         }
         $text = implode("\n", $lines);
