@@ -344,7 +344,12 @@
                                                         </button>
                                                     </div>
                                                 </div>
-                                                <p class="text-muted fs-11 mb-2">Interactive provenance graph — click any node to inspect that pipeline step. It visually maps how your answer was constructed by tracing claims back to the originating source documents.</p>
+                                                <div class="alert alert-info py-2 px-3 mb-2 fs-11" style="border-left: 3px solid var(--bs-info);">
+                                                    <strong>What is this?</strong> This graph traces every step of the AI's reasoning. Your question flows through safety screening → document retrieval → answer generation → claim verification. Each claim in the answer is linked back to the source document that supports it.
+                                                    <span class="text-success fw-medium">Green = grounded in sources.</span>
+                                                    <span class="text-danger fw-medium">Red = unsupported claim.</span>
+                                                    Click any node for details.
+                                                </div>
 
                                                 {{-- vis.js graph container --}}
                                                 <div id="veritrial-graph-{{ $msg->id }}" style="height: 420px; border-radius: 8px; overflow: hidden; background: var(--bs-body-bg); border: 1px solid var(--bs-border-color);"
@@ -1203,8 +1208,8 @@ document.addEventListener('DOMContentLoaded', function () {
                 color: { background: bodyBg, border: color, highlight: { background: bodyBg, border: color } },
                 font: { color: color, size: 11, face: 'Inter, system-ui, sans-serif' },
                 borderWidth: 2,
-                shape: n.type === 'question' ? 'ellipse' : (n.type === 'answer' ? 'star' : (n.type === 'claim' ? 'dot' : 'box')),
-                size: n.type === 'answer' ? 22 : (n.type === 'question' ? 20 : 16),
+                shape: n.type === 'question' ? 'ellipse' : (n.type === 'answer' ? 'diamond' : (n.type === 'claim' ? 'ellipse' : 'box')),
+                size: n.type === 'answer' ? 20 : (n.type === 'question' ? 18 : 14),
                 _raw: n
             };
         });
@@ -1219,7 +1224,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 arrowStrikethrough: false,
                 color: { color: '#94a3b8', highlight: '#6366f1' },
                 font: { size: 9, color: '#94a3b8', align: 'middle' },
-                smooth: { type: 'cubicBezier', forceDirection: 'horizontal', roundness: 0.4 }
+                smooth: { type: 'straightCross', roundness: 0.2 }
             };
         });
 

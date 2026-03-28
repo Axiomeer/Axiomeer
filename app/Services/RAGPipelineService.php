@@ -139,8 +139,24 @@ class RAGPipelineService
             $verificationLatency += $lettuceResult['latency_ms'] ?? 0;
 
             // Ring 3: Self-Consistency Confidence (H-Neuron proxy)
-            // Sample multiple generations, measure agreement as confidence proxy
-            $confidenceResult = $this->selfConsistencyCheck($systemPrompt, $query->question, $chunks, $answer);
+            // SHORT-CIRCUIT: if Ring 1 + Ring 2 already agree on high grounding, skip the
+            // 3 additional LLM calls and derive confidence from the existing scores.
+            // Scientific basis: when both semantic (R1) and NLI (R2) agree, self-consistency
+            // adds marginal new signal and is not worth the 4-8s latency cost.
+            $ring1Strong = $groundednessScore !== null && $groundednessScore >= 0.82;
+            $ring2Strong = $lettuceScore >= 0.78;
+            if ($ring1Strong && $ring2Strong) {
+                $derivedConfidence = round(($groundednessScore + $lettuceScore) / 2, 4);
+                $confidenceResult = [
+                    'score'            => $derivedConfidence,
+                    'method'           => 'derived_from_r1_r2',
+                    'latency_ms'       => 0,
+                    'samples_generated'=> 0,
+                    'note'             => 'Skipped: R1+R2 consensus high enough',
+                ];
+            } else {
+                $confidenceResult = $this->selfConsistencyCheck($systemPrompt, $query->question, $chunks, $answer);
+            }
             $confidenceScore = $confidenceResult['score'];
             $verificationLatency += $confidenceResult['latency_ms'] ?? 0;
 
@@ -331,7 +347,12 @@ class RAGPipelineService
             return ['score' => 0.5, 'claims' => [], 'latency_ms' => 0];
         }
 
-        $context = collect($chunks)->pluck('content')->implode("\n\n");
+        // Cap context to keep the NLI prompt fast — 2000 chars is sufficient for claim verification
+        $rawContext = collect($chunks)->pluck('content')->implode("\n\n");
+        $context = mb_strlen($rawContext) > 2200 ? mb_substr($rawContext, 0, 2200) . "\n[...truncated]" : $rawContext;
+
+        // Cap the answer too to avoid oversized prompts
+        $answerForNli = mb_strlen($answer) > 1200 ? mb_substr($answer, 0, 1200) . '...' : $answer;
 
         $nliPrompt = <<<PROMPT
 You are a hallucination detection system (LettuceDetect NLI classifier).
@@ -342,7 +363,7 @@ SOURCE DOCUMENTS:
 {$context}
 
 ANSWER TO VERIFY:
-{$answer}
+{$answerForNli}
 
 Respond in this exact JSON format (no other text):
 {
@@ -411,7 +432,7 @@ PROMPT;
     private function selfConsistencyCheck(string $systemPrompt, string $question, array $chunks, string $originalAnswer): array
     {
         $startTime = microtime(true);
-        $sampleCount = 2; // N additional samples at high temperature (2 balances speed vs quality)
+        $sampleCount = 1; // 1 alternative sample — reaches here only when R1+R2 didn't short-circuit, so speed matters
 
         // Step 1: Generate N alternative answers at temperature=0.7
         $samples = [];
