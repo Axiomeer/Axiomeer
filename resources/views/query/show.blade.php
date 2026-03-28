@@ -109,10 +109,13 @@
                                         @php
                                             $safetyColors = ['green' => 'success', 'yellow' => 'warning', 'red' => 'danger'];
                                             $safetyLabels = ['green' => 'Grounded', 'yellow' => 'Review Needed', 'red' => 'Blocked'];
+                                            $domainThreshold = $query->domain->safety_threshold ?? 0.75;
+                                            $domainThresholdPct = number_format($domainThreshold * 100, 0);
+                                            $yellowFloor = number_format($domainThreshold * 0.6 * 100, 0);
                                             $safetyExplanations = [
-                                                'green' => 'This answer scored 75%+ on our composite safety check. All claims are well-supported by source documents.',
-                                                'yellow' => 'This answer scored between 45-74%. Some claims may need manual verification against source documents.',
-                                                'red' => 'This answer scored below 45%. High hallucination risk detected - claims are poorly supported by sources.',
+                                                'green' => "This answer met the {$domainThresholdPct}% grounding threshold for {$query->domain->display_name}. All claims are well-supported by source documents.",
+                                                'yellow' => "This answer scored below the {$domainThresholdPct}% threshold required for {$query->domain->display_name}. Some claims may need manual verification.",
+                                                'red' => "This answer scored below {$yellowFloor}%. High hallucination risk — claims are poorly supported by sources.",
                                             ];
                                         @endphp
                                         <div class="mb-2">
@@ -846,24 +849,32 @@
             </div>
         @endif
 
-        {{-- Safety Level Legend --}}
+        {{-- Safety Level Legend — domain-aware thresholds --}}
+        @php
+            $legendThreshold = $query->domain->safety_threshold ?? 0.75;
+            $legendGreenPct  = number_format($legendThreshold * 100, 0);
+            $legendYellowPct = number_format($legendThreshold * 0.6 * 100, 0);
+        @endphp
         <div class="card">
             <div class="card-header py-2">
-                <h6 class="card-title mb-0 fs-13">Safety Levels</h6>
+                <h6 class="card-title mb-0 fs-13">
+                    Safety Levels
+                    <span class="badge bg-secondary-subtle text-secondary ms-1 fs-10">{{ $query->domain->display_name }}</span>
+                </h6>
             </div>
             <div class="card-body py-2">
                 <div class="d-flex flex-column gap-1 fs-12">
                     <div class="d-flex align-items-center gap-2">
                         <span class="badge bg-success fs-10">Green</span>
-                        <span class="text-muted">&ge; 75% &mdash; Fully grounded</span>
+                        <span class="text-muted">&ge; {{ $legendGreenPct }}% &mdash; Fully grounded</span>
                     </div>
                     <div class="d-flex align-items-center gap-2">
                         <span class="badge bg-warning fs-10">Yellow</span>
-                        <span class="text-muted">45-74% &mdash; Review recommended</span>
+                        <span class="text-muted">{{ $legendYellowPct }}&ndash;{{ $legendGreenPct - 1 }}% &mdash; Review recommended</span>
                     </div>
                     <div class="d-flex align-items-center gap-2">
                         <span class="badge bg-danger fs-10">Red</span>
-                        <span class="text-muted">&lt; 45% &mdash; Blocked</span>
+                        <span class="text-muted">&lt; {{ $legendYellowPct }}% &mdash; Blocked</span>
                     </div>
                 </div>
             </div>
