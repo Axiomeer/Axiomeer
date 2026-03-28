@@ -158,7 +158,7 @@ Full observability from user-facing dashboards to infrastructure-level telemetry
 ## 🏛️ System Architecture
 
 ```mermaid
-flowchart LR
+flowchart TD
     subgraph User["User Interface"]
         Q[Query Chat]
         DOC[Document Upload]
@@ -170,7 +170,6 @@ flowchart LR
         WH[HTTP Layer]
         RAG[RAGPipelineService]
         SK[SemanticKernelService]
-        DB[(MySQL)]
     end
 
     subgraph Safety["Safety Gateway"]
@@ -205,42 +204,69 @@ flowchart LR
         SB[Service Bus\naudit-events queue]
         BLOB[Blob Storage]
         AI[App Insights\nOpenTelemetry]
+        DB[(Azure MySQL\nFlexible Server)]
     end
 
-    Q -->|question| WH
-    DOC -->|upload| WH
-    WH --> A1
-    A1 -->|safe| A2
-    A1 -->|blocked| Q
-    A2 -->|chunks| A3
-    A3 -->|answer| A4
-    A4 -->|scored| COCKPIT
-    A4 -->|provenance| DAG
+    %% === 1. CORE USER FLOW ===
+    User -->|"1. User query / upload"| Laravel
+    Laravel -->|"2. Trigger Pipeline"| Agents
+    Agents -->|"3. Output & trace"| User
 
-    A1 --> CS
-    A1 --> PS
-    A1 --> DP
+    %% === 2. AGENT RELATIONSHIPS ===
+    A1 -.->|"Evaluates text safety"| Safety
+    A2 -.->|"Hybrid Search"| AzureAI
+    A3 -.->|"Delegates generation"| SK
+    SK -.->|"AzureChatCompletion"| AzureAI
+    A4 -.->|"Assess answer quality"| Verify
+    Verify -.->|"Scoring"| AzureAI
 
-    A2 --> SEARCH
-    SEARCH -->|vector query| EMB
-    EMB --> AOAI
-
-    A3 --> SK
-    SK -->|domain skill| AOAI
-
-    A4 --> R1
-    A4 --> R2
-    A4 --> R3
-    R1 --> FOUND
-    R3 --> AOAI
-
-    RAG --> DB
-    RAG --> SB
-    KV -->|secrets| Laravel
-    DOCINTEL -->|chunks| SEARCH
-    DB --> BLOB
-    RAG --> AI
+    %% === 3. INFRASTRUCTURE & BACKEND ===
+    Laravel -.->|"Logs, metrics, storage"| Infra
+    Agents -.->|"DAG tamper proofing"| Infra
 ```
+
+---
+
+## The 4-Stage Agent Pipeline (Sequential Process Pattern)
+
+Axiomeer ditches the concept of a single "all-knowing" AI. Instead, it utilizes a **Multi-Agent Sequential Process**, an architectural pattern borrowed directly from the Semantic Kernel playbook. This ensures that every query is passed along an assembly line of highly specialized, single-purpose agents.
+
+1. **Safety Gateway Agent**: Before a query ever reaches an LLM, it is intercepted and evaluated against Azure AI Content Safety and Azure Prompt Shields. It strictly blocks jailbreak attempts and harmful language (hate, violence, self-harm).
+2. **Retrieval Agent**: Acts as the system's librarian. It executes a **Hybrid Search**—running both a traditional BM25 keyword search and a heavy 1536-dimensional semantic vector search—then mathematically merges the best results using Reciprocal Rank Fusion (RRF).
+3. **Generation Agent (Semantic Kernel)**: This is the brain of the operation. Orchestrated by a Python-based Azure Function running the Microsoft Semantic Kernel SDK, this agent dynamically selects a "Skill Plugin" based on the user's domain (Healthcare vs. Legal). It securely injects the retrieved context and uses stateful Memory tracking to format a rigorously grounded system prompt.
+4. **Verification Agent**: The final gatekeeper. Rather than trusting the generated text, this agent decomposes the output into individual claims and scores every single sentence using the Three-Ring Defense before it is allowed to reach the end-user.
+
+---
+
+## The Three-Ring Hallucination Defense
+
+In regulated domains like Finance and Healthcare, hallucinating a single fact can result in catastrophic liability. To counter this, Axiomeer implements a **Three-Ring Defense** layer—a multi-faceted hallucination detection engine that evaluates every generated answer mathematically.
+
+| Ring | Defense Mechanism | Explanation | Weight |
+|---|---|---|---|
+| **Ring 1** | **Azure Groundedness Agent** | Submits the Prompt and Answer to an autonomous AI Foundry Agent. It grades the response against a rigorous 1-5 evaluation rubric for strict contextual grounding, establishing the baseline truth score. | **50%** |
+| **Ring 2** | **LettuceDetect (NLI)** | Operates as an LLM-as-a-judge using Natural Language Inference (NLI). This ring slices the final answer into isolated, atomic claims and individually attempts to map them directly back to the source chunks. Any unmapped claims are flagged as unsupported. | **30%** |
+| **Ring 3** | **Self-Consistency Sampling** | Forces the LLM to generate the exact same answer 3 separate times at a slightly higher temperature. It then measures the variance. If the AI fluctuates wildly in its claims, confidence plummets. | **20%** |
+
+### Dynamic Safety Scoring
+
+Once the rings compute the final composite percentage, the system checks the **Domain Policy Drop-Threshold**:
+- **Healthcare**: Requires ≥ 90% Grounding.
+- **Legal**: Requires ≥ 80% Grounding.
+- **Finance**: Requires ≥ 75% Grounding.
+
+If an answer falls below the threshold, it is aggressively suppressed and replaced with a strict warning. If it falls marginally on the safety line, the UI visibly flags the specific ungrounded sentences for manual human review.
+
+---
+
+## VeriTrail Provenance DAG
+
+It's not enough for an AI to be correct; it must be completely auditable. Enter the **VeriTrail DAG (Directed Acyclic Graph)**.
+
+Every single time Axiomeer generates an answer, it automatically maps out a cryptographic, visual dependency graph of how that exact string of text came to exist. Starting from the very specific **Atomic Claim** the AI made, VeriTrail draws backward dependency routing arrows identifying exactly which sentence in which original uploaded document inspired the generation.
+
+**Tamper-Proof Verification:**
+Because these trails must hold up in regulatory audits, each generated DAG is passed through a distinct Node.js Azure Function. This function validates the graph structure, ensures no claims were "orphaned" without a source, and signs the graph sequence with an immutable **SHA-256 Integrity Hash**. This hash establishes a tamper-evident fingerprint, guaranteeing to an auditor that the AI's logic path was never retroactively altered.
 
 ---
 
@@ -248,26 +274,22 @@ flowchart LR
 
 | Category | Technology / Azure Service |
 |:---------|:---------------------------|
-| **Frontend** | Bootstrap 5 (Reback theme), Alpine.js, Vanilla JS |
-| **Visualization** | vis.js (VeriTrail DAG), Iconify Icons |
+| **Frontend** | Bootstrap 5 (Reback theme), Vanilla JS, vis.js (VeriTrail DAG), Iconify Icons |
 | **Backend** | Laravel 12, PHP 8.2 |
 | **Database** | MySQL 8 |
-| **AI Orchestration** | Semantic Kernel (PHP) — Skills, Planner, Memory |
+| **AI Orchestration** | Semantic Kernel SDK (Python Azure Function) — Sequential Process, Skills, Memory |
 | **LLM Models** | Azure OpenAI GPT-4.1 + GPT-4.1-mini (Model Router) |
 | **Embeddings** | Azure OpenAI text-embedding-ada-002 (1536-dim) |
 | **Search** | Azure AI Search — Hybrid BM25 + HNSW Vector, RRF fusion, Semantic Ranker |
 | **Agent Service** | Azure AI Foundry — Groundedness Evaluator, Agent Threads |
 | **Safety** | Azure Content Safety + Prompt Shields (jailbreak + injection detection) |
 | **Documents** | Azure Document Intelligence — OCR, table extraction, chunking |
-| **Speech** | Azure Speech Services — Neural TTS |
+| **Vision** | Azure AI Vision — camera scan OCR (2024-02-01 GA) |
+| **Speech** | Azure Speech Services — Neural TTS (en-US-AriaNeural) |
 | **Secrets** | Azure Key Vault |
 | **Queuing** | Azure Service Bus — async audit event pipeline |
-| **Storage** | Azure Blob Storage |
 | **Observability** | Application Insights + OpenTelemetry (`gen_ai.*` distributed tracing) |
-| **Build** | Vite 7, Tailwind CSS 3.1, NPM |
 | **CI/CD** | GitHub Actions → Azure App Service |
-
-**Total Azure Services: 11**
 
 ---
 
