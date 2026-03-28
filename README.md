@@ -432,6 +432,9 @@ Axiomeer is built around a single principle: **AI in regulated domains must be p
 | **Tony** |
 |:---:|
 | [![GitHub](https://img.shields.io/badge/GitHub-100000?style=for-the-badge&logo=github&logoColor=white)](https://github.com/your-handle) |
+| **Adrian** |
+|:---:|
+| [![GitHub](https://img.shields.io/badge/GitHub-100000?style=for-the-badge&logo=github&logoColor=white)](https://github.com/your-handle) |
 
 ---
 
