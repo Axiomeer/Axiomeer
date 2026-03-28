@@ -85,6 +85,12 @@
                                 <span class="badge bg-light text-muted fs-11">PDF, DOCX, TXT, CSV, JSON, Images, XLSX, PPTX, HTML</span>
                                 <br>
                                 <span class="text-muted fs-11">Max 50 MB per file &middot; Up to 10 files at once</span>
+                                <div class="mt-3">
+                                    <button type="button" class="btn btn-sm btn-outline-info" id="scanCameraBtn">
+                                        <iconify-icon icon="iconamoon:camera-duotone" class="me-1"></iconify-icon>
+                                        Scan Document with Camera
+                                    </button>
+                                </div>
                             </div>
                         </div>
                         @error('files')
@@ -162,13 +168,62 @@
     </div>
 </div>
 
+{{-- Camera Scan Modal --}}
+<div class="modal fade" id="cameraModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <iconify-icon icon="iconamoon:camera-duotone" class="text-info me-1"></iconify-icon>
+                    Scan Document
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" id="cameraCloseBtn"></button>
+            </div>
+            <div class="modal-body">
+                <div id="cameraFeed">
+                    <video id="cameraVideo" class="w-100 rounded mb-2" autoplay playsinline style="max-height: 360px; object-fit: cover;"></video>
+                    <div class="d-flex gap-2">
+                        <button type="button" class="btn btn-primary flex-grow-1" id="captureBtn">
+                            <iconify-icon icon="iconamoon:camera-duotone" class="me-1"></iconify-icon>
+                            Capture
+                        </button>
+                    </div>
+                </div>
+                <canvas id="cameraCanvas" class="d-none"></canvas>
+                <div id="cameraPreview" class="d-none">
+                    <img id="capturedImg" class="w-100 rounded mb-2">
+                    <div id="ocrStatus" class="text-center text-muted fs-13 mb-2">
+                        <i class="bx bx-loader-alt bx-spin me-1"></i> Extracting text...
+                    </div>
+                    <div id="ocrResult" class="d-none">
+                        <label class="form-label fw-medium fs-12">Extracted Text</label>
+                        <textarea id="ocrText" class="form-control form-control-sm" rows="6" style="font-size: 12px;"></textarea>
+                        <div class="d-flex gap-2 mt-2">
+                            <button type="button" class="btn btn-success btn-sm flex-grow-1" id="useOcrBtn">
+                                <iconify-icon icon="iconamoon:check-circle-1-duotone" class="me-1"></iconify-icon>
+                                Add to Upload Queue
+                            </button>
+                            <button type="button" class="btn btn-light btn-sm" id="retakeCameraBtn">
+                                Retake
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 @endsection
 
 @push('scripts')
 <script>
+// Expose file list state for camera OCR integration
+var selectedFiles, fileInput, renderFileList;
+
 document.addEventListener('DOMContentLoaded', function () {
     var dropzone = document.getElementById('dropzone');
-    var fileInput = document.getElementById('fileInput');
+    fileInput = document.getElementById('fileInput');
     var fileList = document.getElementById('fileList');
     var fileListItems = document.getElementById('fileListItems');
     var uploadBtn = document.getElementById('uploadBtn');
@@ -176,7 +231,7 @@ document.addEventListener('DOMContentLoaded', function () {
     var fileCount = document.getElementById('fileCount');
     var uploadForm = document.getElementById('uploadForm');
 
-    var selectedFiles = new DataTransfer();
+    selectedFiles = new DataTransfer();
 
     // Click to browse
     dropzone.addEventListener('click', function () { fileInput.click(); });
@@ -249,7 +304,7 @@ document.addEventListener('DOMContentLoaded', function () {
         return icons[ext] || 'bx-file text-muted';
     }
 
-    function renderFileList() {
+    renderFileList = function renderFileList() {
         fileListItems.innerHTML = '';
         var count = selectedFiles.files.length;
 
@@ -285,12 +340,111 @@ document.addEventListener('DOMContentLoaded', function () {
                 removeFile(parseInt(this.getAttribute('data-index')));
             });
         });
-    }
+    };
 
     // Show overlay on submit
     uploadForm.addEventListener('submit', function () {
         document.getElementById('upload-overlay').classList.remove('d-none');
     });
+});
+</script>
+<script>
+// Camera OCR
+document.addEventListener('DOMContentLoaded', function () {
+(function () {
+    var stream = null;
+    var cameraModal = document.getElementById('cameraModal');
+    var bsModal = null;
+
+    document.getElementById('scanCameraBtn').addEventListener('click', function () {
+        bsModal = new bootstrap.Modal(cameraModal);
+        bsModal.show();
+        startCamera();
+    });
+
+    document.getElementById('cameraCloseBtn').addEventListener('click', stopCamera);
+    cameraModal.addEventListener('hidden.bs.modal', stopCamera);
+
+    function startCamera() {
+        document.getElementById('cameraFeed').classList.remove('d-none');
+        document.getElementById('cameraPreview').classList.add('d-none');
+        navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+            .then(function (s) {
+                stream = s;
+                document.getElementById('cameraVideo').srcObject = s;
+            })
+            .catch(function (e) {
+                alert('Camera access denied or unavailable: ' + e.message);
+                if (bsModal) bsModal.hide();
+            });
+    }
+
+    function stopCamera() {
+        if (stream) {
+            stream.getTracks().forEach(function (t) { t.stop(); });
+            stream = null;
+        }
+    }
+
+    document.getElementById('captureBtn').addEventListener('click', function () {
+        var video = document.getElementById('cameraVideo');
+        var canvas = document.getElementById('cameraCanvas');
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        canvas.getContext('2d').drawImage(video, 0, 0);
+        var dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+
+        stopCamera();
+        document.getElementById('cameraFeed').classList.add('d-none');
+        document.getElementById('cameraPreview').classList.remove('d-none');
+        document.getElementById('capturedImg').src = dataUrl;
+        document.getElementById('ocrStatus').classList.remove('d-none');
+        document.getElementById('ocrResult').classList.add('d-none');
+
+        // Call OCR API
+        fetch('{{ route("api.ocr-scan") }}', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': '{{ csrf_token() }}' },
+            body: JSON.stringify({ image: dataUrl })
+        })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+            document.getElementById('ocrStatus').classList.add('d-none');
+            document.getElementById('ocrResult').classList.remove('d-none');
+            document.getElementById('ocrText').value = data.text || '';
+            if (data.error) {
+                document.getElementById('ocrText').value = '(OCR failed: ' + data.error + ')';
+            }
+        })
+        .catch(function () {
+            document.getElementById('ocrStatus').classList.add('d-none');
+            document.getElementById('ocrResult').classList.remove('d-none');
+            document.getElementById('ocrText').value = '(OCR request failed — check network or Azure Vision config)';
+        });
+    });
+
+    document.getElementById('useOcrBtn').addEventListener('click', function () {
+        var text = document.getElementById('ocrText').value.trim();
+        if (!text) { alert('No text to add.'); return; }
+
+        var filename = 'camera-scan-' + Date.now() + '.txt';
+        var blob = new Blob([text], { type: 'text/plain' });
+        var file = new File([blob], filename, { type: 'text/plain' });
+
+        // Add to the existing selectedFiles DataTransfer
+        selectedFiles.items.add(file);
+        fileInput.files = selectedFiles.files;
+        renderFileList();
+
+        if (bsModal) bsModal.hide();
+    });
+
+    document.getElementById('retakeCameraBtn').addEventListener('click', function () {
+        document.getElementById('cameraFeed').classList.remove('d-none');
+        document.getElementById('cameraPreview').classList.add('d-none');
+        startCamera();
+    });
+})();
 });
 </script>
 @endpush

@@ -36,7 +36,7 @@ class RAGPipelineService
      * 4. Verification Agent — three-ring hallucination defense + RAGAS evaluation
      * 5. Persist results — save answer, scores, citations, provenance DAG, audit log
      */
-    public function process(Query $query): Query
+    public function process(Query $query, array $documentIds = []): Query
     {
         $query->update(['status' => 'processing']);
         $domain = $query->domain;
@@ -70,7 +70,7 @@ class RAGPipelineService
 
             // ── Stage 2: Retrieval Agent ──
             $retrievalRun = $this->logAgentStart($query, 'retrieval', $traceId);
-            $searchResult = $this->search->search($query->question, $domain->slug ?? null, 5);
+            $searchResult = $this->search->search($query->question, $domain->slug ?? null, 5, $documentIds);
 
             if (!$searchResult['success']) {
                 $this->logAgentEnd($retrievalRun, 'failed', $searchResult);

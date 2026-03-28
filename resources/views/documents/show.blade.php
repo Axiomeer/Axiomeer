@@ -3,6 +3,14 @@
 @section('title', $document->title)
 @section('page-title', 'Documents')
 
+@push('styles')
+<style>
+    .chunk-block { transition: background 0.25s ease; border-radius: 8px; padding: 10px 14px; }
+    .chunk-block.tts-active { background: rgba(var(--bs-warning-rgb), 0.15); border-left: 3px solid var(--bs-warning); }
+    .chunk-block:target { background: rgba(var(--bs-primary-rgb), 0.08); }
+</style>
+@endpush
+
 @section('content')
 
 <div class="row mb-3">
@@ -133,4 +141,137 @@
     </div>
 </div>
 
+{{-- Document Content Viewer --}}
+@if ($document->status === 'indexed' && count($chunks) > 0)
+<div class="row mt-3">
+    <div class="col-lg-12">
+        <div class="card">
+            <div class="card-header d-flex align-items-center justify-content-between">
+                <h5 class="card-title mb-0">
+                    <iconify-icon icon="iconamoon:file-document-duotone" class="text-primary me-1"></iconify-icon>
+                    Document Content
+                    <span class="badge bg-primary-subtle text-primary ms-2 fs-11">{{ count($chunks) }} chunks</span>
+                </h5>
+                <button class="btn btn-sm btn-outline-success" id="docReadAloudBtn">
+                    <iconify-icon icon="iconamoon:volume-up-duotone" class="me-1"></iconify-icon>
+                    Read Aloud
+                </button>
+            </div>
+            <div class="card-body" style="max-height: 600px; overflow-y: auto;" id="docContentBody">
+                @foreach ($chunks as $chunk)
+                    <div class="chunk-block mb-2"
+                         id="chunk-{{ $chunk['chunk_index'] }}"
+                         data-chunk-index="{{ $chunk['chunk_index'] }}">
+                        <div class="d-flex justify-content-between align-items-start mb-1">
+                            <span class="text-muted fs-10 fw-medium">
+                                Chunk {{ $chunk['chunk_index'] + 1 }}
+                                @if ($chunk['page'])
+                                    &middot; Page {{ $chunk['page'] }}
+                                @endif
+                            </span>
+                        </div>
+                        <p class="mb-0 fs-13" style="white-space: pre-wrap; line-height: 1.7;">{{ $chunk['content'] }}</p>
+                    </div>
+                @endforeach
+            </div>
+        </div>
+    </div>
+</div>
+@elseif ($document->status !== 'indexed')
+<div class="row mt-3">
+    <div class="col-lg-12">
+        <div class="card">
+            <div class="card-body text-center py-4">
+                <iconify-icon icon="iconamoon:clock-duotone" class="fs-36 text-muted d-block mb-2"></iconify-icon>
+                <p class="text-muted fs-13 mb-0">Document content will be available once indexing is complete.</p>
+            </div>
+        </div>
+    </div>
+</div>
+@endif
+
 @endsection
+
+@push('scripts')
+<script>
+(function () {
+    var chunks = @json(array_values($chunks));
+    var currentChunkIndex = 0;
+    var isSpeaking = false;
+    var readBtn = document.getElementById('docReadAloudBtn');
+
+    if (!readBtn || chunks.length === 0) return;
+
+    function highlightChunk(idx) {
+        document.querySelectorAll('.chunk-block').forEach(function (el) {
+            el.classList.remove('tts-active');
+        });
+        var el = document.getElementById('chunk-' + idx);
+        if (el) {
+            el.classList.add('tts-active');
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+    }
+
+    function clearHighlights() {
+        document.querySelectorAll('.chunk-block').forEach(function (el) {
+            el.classList.remove('tts-active');
+        });
+    }
+
+    function stopReading() {
+        window.speechSynthesis.cancel();
+        isSpeaking = false;
+        currentChunkIndex = 0;
+        clearHighlights();
+        readBtn.innerHTML = '<iconify-icon icon="iconamoon:volume-up-duotone" class="me-1"></iconify-icon> Read Aloud';
+    }
+
+    function readChunk(idx) {
+        if (idx >= chunks.length || !isSpeaking) {
+            stopReading();
+            return;
+        }
+
+        currentChunkIndex = idx;
+        highlightChunk(chunks[idx].chunk_index);
+
+        var utterance = new SpeechSynthesisUtterance(chunks[idx].content);
+        utterance.rate = 1.0;
+        utterance.pitch = 1;
+        utterance.volume = 0.85;
+
+        var voices = window.speechSynthesis.getVoices();
+        var preferred = voices.find(function (v) {
+            return v.lang.startsWith('en') && (v.name.indexOf('Natural') !== -1 || v.name.indexOf('Online') !== -1);
+        }) || voices.find(function (v) { return v.lang.startsWith('en'); });
+        if (preferred) utterance.voice = preferred;
+
+        utterance.onend = function () {
+            if (isSpeaking) readChunk(idx + 1);
+        };
+        utterance.onerror = function () {
+            if (isSpeaking) readChunk(idx + 1);
+        };
+
+        window.speechSynthesis.speak(utterance);
+    }
+
+    readBtn.addEventListener('click', function () {
+        if (isSpeaking) {
+            stopReading();
+            return;
+        }
+
+        if (!('speechSynthesis' in window)) {
+            alert('Text-to-speech is not supported in your browser.');
+            return;
+        }
+
+        isSpeaking = true;
+        readBtn.innerHTML = '<i class="bx bx-stop-circle me-1"></i> Stop Reading';
+        readChunk(0);
+    });
+})();
+</script>
+@endpush

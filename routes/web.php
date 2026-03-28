@@ -66,6 +66,7 @@ Route::middleware('auth')->prefix('api')->group(function () {
     Route::get('/speech-token', \App\Http\Controllers\Api\SpeechTokenController::class)->name('api.speech-token');
     Route::post('/web-search', [\App\Http\Controllers\Api\WebSearchController::class, 'search'])->name('api.web-search');
     Route::post('/generate-domain-prompt', [SettingsController::class, 'generateDomainPrompt'])->name('api.generate-domain-prompt');
+    Route::post('/ocr-scan', \App\Http\Controllers\Api\OcrScanController::class)->name('api.ocr-scan');
 });
 
 require __DIR__.'/auth.php';

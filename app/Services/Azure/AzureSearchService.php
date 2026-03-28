@@ -30,7 +30,7 @@ class AzureSearchService
      * Perform a hybrid search (keyword BM25 + semantic ranking) against Azure AI Search.
      * Falls back to keyword-only if semantic ranking is unavailable.
      */
-    public function search(string $query, string $domainSlug = null, int $topK = 5): array
+    public function search(string $query, string $domainSlug = null, int $topK = 5, array $documentIds = []): array
     {
         if (!$this->isConfigured()) {
             return $this->mockSearch($query, $topK);
@@ -70,6 +70,11 @@ class AzureSearchService
             $body['filter'] = "domain eq '{$domainSlug}'";
         }
 
+        if (!empty($documentIds)) {
+            $docFilter = "document_id in (" . implode(',', array_map(fn($id) => "'{$id}'", $documentIds)) . ")";
+            $body['filter'] = isset($body['filter']) ? "({$body['filter']}) and ({$docFilter})" : $docFilter;
+        }
+
         $startTime = microtime(true);
 
         $response = Http::withHeaders([
@@ -82,7 +87,7 @@ class AzureSearchService
         // Fall back to simple keyword search if semantic fails
         if ($response->failed() && $response->status() !== 404) {
             Log::info('Semantic search failed, falling back to keyword search', ['status' => $response->status()]);
-            return $this->keywordSearch($query, $domainSlug, $topK);
+            return $this->keywordSearch($query, $domainSlug, $topK, $documentIds);
         }
 
         if ($response->failed()) {
@@ -130,7 +135,7 @@ class AzureSearchService
     /**
      * Keyword-only BM25 search (fallback when semantic ranking unavailable).
      */
-    private function keywordSearch(string $query, string $domainSlug = null, int $topK = 5): array
+    private function keywordSearch(string $query, string $domainSlug = null, int $topK = 5, array $documentIds = []): array
     {
         $url = "{$this->endpoint}/indexes/{$this->index}/docs/search?api-version={$this->apiVersion}";
 
@@ -143,6 +148,11 @@ class AzureSearchService
 
         if ($domainSlug) {
             $body['filter'] = "domain eq '{$domainSlug}'";
+        }
+
+        if (!empty($documentIds)) {
+            $docFilter = "document_id in (" . implode(',', array_map(fn($id) => "'{$id}'", $documentIds)) . ")";
+            $body['filter'] = isset($body['filter']) ? "({$body['filter']}) and ({$docFilter})" : $docFilter;
         }
 
         $startTime = microtime(true);
@@ -187,6 +197,50 @@ class AzureSearchService
             'latency_ms' => $latencyMs,
             'search_mode' => 'keyword',
         ];
+    }
+
+    /**
+     * Retrieve all indexed chunks for a specific document.
+     */
+    public function getDocumentChunks(string $documentId, int $limit = 100): array
+    {
+        if (!$this->isConfigured()) {
+            return ['success' => true, 'chunks' => []];
+        }
+
+        $url = "{$this->endpoint}/indexes/{$this->index}/docs/search?api-version={$this->apiVersion}";
+
+        $body = [
+            'search' => '*',
+            'queryType' => 'simple',
+            'top' => min($limit, 1000),
+            'select' => 'id,title,content,page_number,chunk_index,document_id',
+            'filter' => "document_id eq '{$documentId}'",
+            'orderby' => 'chunk_index asc',
+        ];
+
+        $response = Http::withHeaders([
+            'api-key' => $this->apiKey,
+            'Content-Type' => 'application/json',
+        ])->timeout(30)->post($url, $body);
+
+        if ($response->failed()) {
+            return ['success' => false, 'chunks' => []];
+        }
+
+        $results = $response->json('value', []);
+        $chunks = array_map(function ($result) {
+            return [
+                'chunk_index' => $result['chunk_index'] ?? 0,
+                'content'     => $result['content'] ?? '',
+                'page'        => $result['page_number'] ?? null,
+            ];
+        }, $results);
+
+        // Sort by chunk_index ascending
+        usort($chunks, fn($a, $b) => $a['chunk_index'] <=> $b['chunk_index']);
+
+        return ['success' => true, 'chunks' => $chunks];
     }
 
     /**

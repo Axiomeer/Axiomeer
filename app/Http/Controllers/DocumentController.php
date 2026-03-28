@@ -124,7 +124,15 @@ class DocumentController extends Controller
     public function show(Document $document)
     {
         $document->load(['domain', 'uploader', 'citations.relatedQuery']);
-        return view('documents.show', compact('document'));
+
+        // Fetch indexed chunks from Azure AI Search for content viewer
+        $chunks = [];
+        if ($document->status === 'indexed' && $document->chunk_count > 0) {
+            $searchResult = $this->searchService->getDocumentChunks((string) $document->id, $document->chunk_count);
+            $chunks = $searchResult['chunks'] ?? [];
+        }
+
+        return view('documents.show', compact('document', 'chunks'));
     }
 
     public function destroy(Document $document)

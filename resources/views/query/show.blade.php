@@ -300,7 +300,13 @@
                                                         <div class="d-flex justify-content-between align-items-start">
                                                             <div class="flex-grow-1">
                                                                 @if ($citation->document_id)
-                                                                    <a href="{{ route('documents.show', $citation->document_id) }}" class="fw-medium fs-12 text-decoration-none" target="_blank">
+                                                                    @php
+                                                                        $citationUrl = route('documents.show', $citation->document_id);
+                                                                        if ($citation->chunk_index !== null) {
+                                                                            $citationUrl .= '#chunk-' . $citation->chunk_index;
+                                                                        }
+                                                                    @endphp
+                                                                    <a href="{{ $citationUrl }}" class="fw-medium fs-12 text-decoration-none" target="_blank">
                                                                         <iconify-icon icon="iconamoon:file-document-duotone" class="me-1 fs-12"></iconify-icon>
                                                                         {{ Str::limit($citation->document_title ?? 'Source', 40) }}
                                                                         <iconify-icon icon="iconamoon:arrow-top-right-1-duotone" class="fs-10 ms-1"></iconify-icon>

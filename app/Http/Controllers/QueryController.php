@@ -44,6 +44,8 @@ class QueryController extends Controller
             'question' => 'required|string|max:2000',
             'domain_id' => 'required|exists:domains,id',
             'conversation_id' => 'nullable|exists:conversations,id',
+            'document_ids' => 'nullable|array',
+            'document_ids.*' => 'string',
         ]);
 
         // Find or create conversation
@@ -74,7 +76,8 @@ class QueryController extends Controller
         ]);
 
         // Run the RAG pipeline synchronously
-        $query = $this->pipeline->process($query);
+        $documentIds = array_filter($request->input('document_ids', []));
+        $query = $this->pipeline->process($query, $documentIds);
 
         // Auto-generate conversation title from first query
         if (!$conversation->title && $query->status === 'completed') {

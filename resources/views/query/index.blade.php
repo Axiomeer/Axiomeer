@@ -218,6 +218,19 @@
                         <textarea class="form-control" id="modal_question" name="question" rows="3"
                                   placeholder="e.g. What are the key requirements for GDPR data processing agreements?" required></textarea>
                     </div>
+
+                    {{-- Optional document filter --}}
+                    <div class="mb-0">
+                        <label class="form-label fw-medium fs-12 mb-1">
+                            Limit to documents
+                            <span class="text-muted fw-normal">(optional — leave blank to search all)</span>
+                        </label>
+                        <div id="docFilterContainer" class="border rounded p-2" style="max-height: 160px; overflow-y: auto;">
+                            <div class="text-muted fs-12 text-center py-2" id="docFilterLoading">
+                                <i class="bx bx-loader-alt bx-spin me-1"></i> Loading documents...
+                            </div>
+                        </div>
+                    </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
@@ -309,7 +322,10 @@ document.addEventListener('DOMContentLoaded', function () {
     // Listen for domain radio changes in the new chat modal
     document.querySelectorAll('input[name="domain_id"]').forEach(function (radio) {
         radio.addEventListener('change', function () {
-            if (this.checked) updateSpecCard(this.value);
+            if (this.checked) {
+                updateSpecCard(this.value);
+                loadDocFilter(this.value);
+            }
         });
     });
 
@@ -320,6 +336,41 @@ document.addEventListener('DOMContentLoaded', function () {
             if (domainId) updateSpecCard(domainId);
         });
     });
+
+    // Document filter for new chat modal
+    function loadDocFilter(domainId) {
+        var container = document.getElementById('docFilterContainer');
+        if (!container) return;
+        container.innerHTML = '<div class="text-muted fs-12 text-center py-2" id="docFilterLoading"><i class="bx bx-loader-alt bx-spin me-1"></i> Loading documents...</div>';
+
+        var domain = domains.find(function (d) { return d.id == domainId; });
+        var docs = (domain && domain.documents) ? domain.documents : [];
+
+        if (docs.length === 0) {
+            container.innerHTML = '<div class="text-muted fs-12 text-center py-2">No documents in this domain.</div>';
+            return;
+        }
+
+        var html = '';
+        docs.forEach(function (doc) {
+            html += '<div class="form-check py-1">' +
+                '<input class="form-check-input" type="checkbox" name="document_ids[]" value="' + doc.id + '" id="docFilter_' + doc.id + '">' +
+                '<label class="form-check-label fs-12" for="docFilter_' + doc.id + '">' +
+                '<iconify-icon icon="iconamoon:file-document-duotone" class="me-1 text-primary"></iconify-icon>' +
+                doc.title +
+                '</label></div>';
+        });
+        container.innerHTML = html;
+    }
+
+    // Load docs for default domain when modal opens
+    var newChatModal = document.getElementById('newChatModal');
+    if (newChatModal) {
+        newChatModal.addEventListener('show.bs.modal', function () {
+            var checkedDomain = document.querySelector('input[name="domain_id"]:checked');
+            if (checkedDomain) loadDocFilter(checkedDomain.value);
+        });
+    }
 
     // Pipeline loading overlay on form submit
     document.querySelectorAll('form[action*="query"]').forEach(function (form) {
