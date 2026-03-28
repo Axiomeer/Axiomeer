@@ -4,6 +4,7 @@ namespace App\Providers;
 
 use Illuminate\Pagination\Paginator;
 use Illuminate\Support\ServiceProvider;
+use Illuminate\Support\Facades\URL;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -30,8 +31,17 @@ class AppServiceProvider extends ServiceProvider
     /**
      * Bootstrap any application services.
      */
-    public function boot(): void
+    public function boot()
     {
-        Paginator::useBootstrapFive();
+        // Use getHost() and isProduction() with correct camelCase
+        $istunnel = str_contains(request()->getHost(), 'trycloudflare.com') || str_contains(request()->getHost(), 'ngrok-free.app');
+        $isproduction = app()->isProduction();
+        $islocalhost = in_array(request()->getHost(), ['127.0.0.1', 'localhost']);
+
+        if (($istunnel || $isproduction) && !$islocalhost) {
+            URL::forceScheme('https');
+        }
     }
+
 }
+
