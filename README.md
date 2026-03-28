@@ -21,6 +21,7 @@ Unlike generic AI chatbots, Axiomeer treats every answer as **guilty until prove
 
 The result: AI that regulated professionals can actually trust and audit.
 
+Powerpoint Link - https://github.com/Axiomeer/Axiomeer/blob/93098ae6cf7321baa93a45d9baa69a4b52757418/Axiomeer.pptx
 ---
 
 ## 📝 Table of Contents
