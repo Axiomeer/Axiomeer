@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="https://i.ibb.co/placeholder/axiomeer-banner.png" alt="Axiomeer Banner" width="100%">
+  <img src="https://i.ibb.co/YFv863KB/logo.png" alt="Axiomeer Banner" width="100%">
 </div>
 
 # 🔬 Axiomeer: The AI-Powered Grounded Intelligence Platform for Regulated Domains
@@ -21,7 +21,54 @@ Unlike generic AI chatbots, Axiomeer treats every answer as **guilty until prove
 
 The result: AI that regulated professionals can actually trust and audit.
 
-Powerpoint Link - https://github.com/Axiomeer/Axiomeer/blob/93098ae6cf7321baa93a45d9baa69a4b52757418/Axiomeer.pptx
+🌐 **Live Demo:** [axiomeer-aubyd5btcug0e4e0.canadacentral-01.azurewebsites.net](https://axiomeer-aubyd5btcug0e4e0.canadacentral-01.azurewebsites.net)
+
+📊 **Powerpoint:** [View Presentation](https://github.com/Axiomeer/Axiomeer/blob/93098ae6cf7321baa93a45d9baa69a4b52757418/Axiomeer.pptx)
+
+---
+
+## 📸 Project Screenshots
+
+### Query Interface & Safety Cockpit
+
+<table>
+  <tr>
+    <td width="50%">
+      <img src="https://i.ibb.co/S70sJ6fq/image.png" alt="Dashboard" width="100%">
+      <p align="center"><em>Main Dashboard</em></p>
+    </td>
+    <td width="50%">
+      <img src="https://i.ibb.co/PsxWxpkd/ask-question.png" alt="Ask Question" width="100%">
+      <p align="center"><em>Ask a Question</em></p>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <img src="https://i.ibb.co/jPn0Drnw/query.png" alt="Query View" width="100%">
+      <p align="center"><em>Query View & Safety Cockpit</em></p>
+    </td>
+    <td width="50%">
+      <img src="https://i.ibb.co/Kc3rk602/documents.png" alt="Document Library" width="100%">
+      <p align="center"><em>Document Library & Indexing</em></p>
+    </td>
+  </tr>
+</table>
+
+### Analytics & Monitoring
+
+<table>
+  <tr>
+    <td width="50%">
+      <img src="https://i.ibb.co/3mDRv7tw/metrics.png" alt="Metrics Dashboard" width="100%">
+      <p align="center"><em>Responsible AI & Metrics Dashboard</em></p>
+    </td>
+    <td width="50%">
+      <img src="https://i.ibb.co/1JXbXz8J/performance.png" alt="Performance Dashboard" width="100%">
+      <p align="center"><em>Agent Pipeline Performance</em></p>
+    </td>
+  </tr>
+</table>
+
 ---
 
 ## 📝 Table of Contents
@@ -158,73 +205,9 @@ Full observability from user-facing dashboards to infrastructure-level telemetry
 
 ## 🏛️ System Architecture
 
-```mermaid
-flowchart TD
-    subgraph User["User Interface"]
-        Q[Query Chat]
-        DOC[Document Upload]
-        COCKPIT[Safety Cockpit]
-        DAG[VeriTrail DAG]
-    end
-
-    subgraph Laravel["Laravel App"]
-        WH[HTTP Layer]
-        RAG[RAGPipelineService]
-        SK[SemanticKernelService]
-    end
-
-    subgraph Safety["Safety Gateway"]
-        CS[Content Safety]
-        PS[Prompt Shields]
-        DP[Domain Policy]
-    end
-
-    subgraph Agents["Multi-Agent Pipeline"]
-        A1[Content Safety Agent]
-        A2[Retrieval Agent]
-        A3[Generation Agent]
-        A4[Verification Agent]
-    end
-
-    subgraph AzureAI["Azure AI Services"]
-        AOAI[Azure OpenAI\nGPT-4.1 / mini]
-        EMB[Embeddings\nada-002]
-        SEARCH[AI Search\nHybrid BM25+Vector]
-        FOUND[AI Foundry\nGroundedness]
-        DOCINTEL[Document Intelligence]
-    end
-
-    subgraph Verify["Three-Ring Defense"]
-        R1[Ring 1: Azure Groundedness\n50% weight]
-        R2[Ring 2: LettuceDetect NLI\n30% weight]
-        R3[Ring 3: Self-consistency\n20% weight]
-    end
-
-    subgraph Infra["Infrastructure"]
-        KV[Key Vault]
-        SB[Service Bus\naudit-events queue]
-        BLOB[Blob Storage]
-        AI[App Insights\nOpenTelemetry]
-        DB[(Azure MySQL\nFlexible Server)]
-    end
-
-    %% === 1. CORE USER FLOW ===
-    User -->|"1. User query / upload"| Laravel
-    Laravel -->|"2. Trigger Pipeline"| Agents
-    Agents -->|"3. Output & trace"| User
-
-    %% === 2. AGENT RELATIONSHIPS ===
-    A1 -.->|"Evaluates text safety"| Safety
-    A2 -.->|"Hybrid Search"| AzureAI
-    A3 -.->|"Delegates generation"| SK
-    SK -.->|"AzureChatCompletion"| AzureAI
-    A4 -.->|"Assess answer quality"| Verify
-    Verify -.->|"Scoring"| AzureAI
-
-    %% === 3. INFRASTRUCTURE & BACKEND ===
-    Laravel -.->|"Logs, metrics, storage"| Infra
-    Agents -.->|"DAG tamper proofing"| Infra
-```
+<div align="center">
+  <img src="https://i.ibb.co/Cp8H8ZJj/axiomeer-archi-finished-2.jpg" alt="Axiomeer System Architecture" width="100%">
+</div>
 
 ---
 
@@ -383,37 +366,6 @@ APPLICATIONINSIGHTS_CONNECTION_STRING=your-connection-string
 
 ---
 
-## 📸 Project Screenshots
-
-### Query Interface & Safety Cockpit
-
-<div align="center">
-  <em>Screenshots coming soon</em>
-</div>
-
-### Feature Showcase
-
-<table>
-  <tr>
-    <td width="50%">
-      <p align="center"><strong>Three-Ring Hallucination Defense</strong></p>
-    </td>
-    <td width="50%">
-      <p align="center"><strong>VeriTrail DAG Provenance View</strong></p>
-    </td>
-  </tr>
-  <tr>
-    <td width="50%">
-      <p align="center"><strong>Document Library & Indexing</strong></p>
-    </td>
-    <td width="50%">
-      <p align="center"><strong>Responsible AI Dashboard</strong></p>
-    </td>
-  </tr>
-</table>
-
----
-
 ## 🤝 Responsible AI Commitment
 
 Axiomeer is built around a single principle: **AI in regulated domains must be provably safe or silent.**
@@ -430,12 +382,11 @@ Axiomeer is built around a single principle: **AI in regulated domains must be p
 
 ## 👥 Team Members
 
-| **Tony** |
+| **Gary Bryan** |
 |:---:|
-| [![GitHub](https://img.shields.io/badge/GitHub-100000?style=for-the-badge&logo=github&logoColor=white)](https://github.com/your-handle) |
-| **Adrian** |
-|:---:|
-| [![GitHub](https://img.shields.io/badge/GitHub-100000?style=for-the-badge&logo=github&logoColor=white)](https://github.com/your-handle) |
+| [![GitHub](https://img.shields.io/badge/GitHub-100000?style=for-the-badge&logo=github&logoColor=white)](https://github.com/SlugVortex) |
+| **Adrian Tennant** ||:---:|
+| [![GitHub](https://img.shields.io/badge/GitHub-100000?style=for-the-badge&logo=github&logoColor=white)](https://github.com/10ant) |
 
 ---
 
